@@ -2,6 +2,7 @@ import Hero from "@/components/Hero";
 import FamilyMember from "@/components/FamilyMember";
 import CountryTracker from "@/components/CountryTracker";
 import TravelStats from "@/components/TravelStats";
+import ContinentFilter from "@/components/ContinentFilter";
 import FamilyMemberDialog from "@/components/FamilyMemberDialog";
 import { useFamilyData } from "@/hooks/useFamilyData";
 
@@ -30,7 +31,12 @@ const Index = () => {
       <TravelStats 
         totalCountries={countries.length}
         totalContinents={totalContinents}
-        familyMembers={familyMembers.length}
+        familyMembers={familyMembers}
+      />
+
+      <ContinentFilter 
+        countries={countries}
+        familyMembers={familyMembers}
       />
 
       <CountryTracker 

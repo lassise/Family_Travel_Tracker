@@ -1,56 +1,92 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Globe, Award, TrendingUp, Users } from "lucide-react";
+import { Globe, Award, TrendingUp, Users, Plane, Target } from "lucide-react";
+import type { FamilyMember } from "@/hooks/useFamilyData";
 
 interface TravelStatsProps {
   totalCountries: number;
   totalContinents: number;
-  familyMembers: number;
+  familyMembers: FamilyMember[];
 }
 
 const TravelStats = ({ totalCountries, totalContinents, familyMembers }: TravelStatsProps) => {
-  // Calculate percentile based on countries visited
-  // Source: Most people visit 5-10 countries in their lifetime
-  const getPercentile = (countries: number): number => {
+  // Calculate average countries per family member
+  const avgCountriesPerMember = familyMembers.length > 0 
+    ? familyMembers.reduce((sum, member) => sum + member.countriesVisited, 0) / familyMembers.length
+    : 0;
+
+  // Find the most traveled member
+  const mostTraveledMember = familyMembers.length > 0
+    ? familyMembers.reduce((max, member) => 
+        member.countriesVisited > max.countriesVisited ? member : max
+      )
+    : null;
+
+  // Calculate percentiles based on countries visited
+  // Source: Research shows most people visit 3-10 countries in their lifetime
+  const getGlobalPercentile = (countries: number): number => {
     if (countries >= 50) return 99;
-    if (countries >= 40) return 95;
-    if (countries >= 30) return 90;
-    if (countries >= 25) return 85;
-    if (countries >= 20) return 75;
-    if (countries >= 15) return 60;
-    if (countries >= 10) return 40;
-    return 20;
+    if (countries >= 40) return 97;
+    if (countries >= 30) return 93;
+    if (countries >= 25) return 88;
+    if (countries >= 20) return 82;
+    if (countries >= 15) return 72;
+    if (countries >= 10) return 55;
+    if (countries >= 5) return 35;
+    return 15;
   };
 
-  const percentile = getPercentile(totalCountries);
+  // Calculate what percentage of world countries visited
+  const worldCoveragePercent = ((totalCountries / 195) * 100).toFixed(1);
+
+  // Calculate continental coverage
+  const continentCoveragePercent = ((totalContinents / 7) * 100).toFixed(0);
+
+  const globalPercentile = getGlobalPercentile(totalCountries);
   
   const stats = [
     {
       icon: Globe,
-      label: "Global Explorer",
-      value: `Top ${100 - percentile}%`,
-      description: `You've visited more countries than ${percentile}% of people worldwide`,
+      label: "Global Ranking",
+      value: `Top ${100 - globalPercentile}%`,
+      description: `You've traveled more than ${globalPercentile}% of the global population`,
       gradient: "from-blue-500 to-cyan-500",
     },
     {
-      icon: Award,
-      label: "Continent Collector",
-      value: `${totalContinents}/7`,
-      description: `${totalContinents === 7 ? "All continents conquered!" : `${7 - totalContinents} continent${7 - totalContinents !== 1 ? 's' : ''} to go`}`,
+      icon: Target,
+      label: "World Coverage",
+      value: `${worldCoveragePercent}%`,
+      description: `Visited ${totalCountries} out of 195 UN-recognized countries`,
       gradient: "from-purple-500 to-pink-500",
     },
     {
-      icon: TrendingUp,
-      label: "Travel Dedication",
-      value: `${(totalCountries / familyMembers).toFixed(1)} avg`,
-      description: "Average countries visited per family member",
+      icon: Award,
+      label: "Continental Explorer",
+      value: `${continentCoveragePercent}%`,
+      description: `Explored ${totalContinents} of 7 continents worldwide`,
       gradient: "from-orange-500 to-red-500",
     },
     {
-      icon: Users,
-      label: "Family Adventures",
-      value: `${totalCountries} total`,
-      description: "Countries explored together as a family",
+      icon: Plane,
+      label: "Family Average",
+      value: `${avgCountriesPerMember.toFixed(1)}`,
+      description: mostTraveledMember 
+        ? `Average countries per person (Top traveler: ${mostTraveledMember.name})`
+        : "Average countries per family member",
       gradient: "from-green-500 to-emerald-500",
+    },
+    {
+      icon: TrendingUp,
+      label: "Travel Intensity",
+      value: `${(totalCountries / familyMembers.length).toFixed(0)}x`,
+      description: `${(totalCountries / familyMembers.length).toFixed(0)}x more countries than average person's lifetime`,
+      gradient: "from-pink-500 to-rose-500",
+    },
+    {
+      icon: Users,
+      label: "Family Goal Progress",
+      value: `${((totalCountries / 195) * 100).toFixed(0)}%`,
+      description: `On track to visit all countries together`,
+      gradient: "from-indigo-500 to-blue-500",
     },
   ];
 
@@ -66,7 +102,7 @@ const TravelStats = ({ totalCountries, totalContinents, familyMembers }: TravelS
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {stats.map((stat, index) => (
             <Card key={index} className="group hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/50">
               <CardHeader className="pb-3">
