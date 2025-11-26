@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Edit } from "lucide-react";
+import { Plus, Edit, Check, ChevronsUpDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { getAllCountries, type CountryOption } from "@/lib/countriesData";
+import { cn } from "@/lib/utils";
 
 const countrySchema = z.object({
   name: z.string().trim().min(1, "Country name is required").max(100, "Name must be less than 100 characters"),
@@ -27,23 +29,43 @@ interface CountryDialogProps {
   onSuccess: () => void;
 }
 
-const continents = ["Africa", "Antarctica", "Asia", "Europe", "North America", "Oceania", "South America"];
+const allCountries = getAllCountries();
 
 const CountryDialog = ({ country, familyMembers = [], onSuccess }: CountryDialogProps) => {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(country?.name || "");
-  const [flag, setFlag] = useState(country?.flag || "");
-  const [continent, setContinent] = useState(country?.continent || "");
+  const [comboboxOpen, setComboboxOpen] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<CountryOption | null>(
+    country ? { name: country.name, flag: country.flag, continent: country.continent, code: "" } : null
+  );
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  const handleCountrySelect = (countryOption: CountryOption) => {
+    setSelectedCountry(countryOption);
+    setComboboxOpen(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
+    if (!selectedCountry) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a country",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
-      const validated = countrySchema.parse({ name, flag, continent });
+      const validated = countrySchema.parse({ 
+        name: selectedCountry.name, 
+        flag: selectedCountry.flag, 
+        continent: selectedCountry.continent 
+      });
 
       if (country) {
         const { error } = await supabase
@@ -91,9 +113,7 @@ const CountryDialog = ({ country, familyMembers = [], onSuccess }: CountryDialog
       onSuccess();
       
       // Reset form
-      setName("");
-      setFlag("");
-      setContinent("");
+      setSelectedCountry(null);
       setSelectedMembers([]);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -135,41 +155,56 @@ const CountryDialog = ({ country, familyMembers = [], onSuccess }: CountryDialog
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="name">Country Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Japan"
-              maxLength={100}
-            />
-          </div>
-          
-          <div>
-            <Label htmlFor="flag">Flag Emoji</Label>
-            <Input
-              id="flag"
-              value={flag}
-              onChange={(e) => setFlag(e.target.value)}
-              placeholder="🇯🇵"
-              maxLength={10}
-            />
-          </div>
-          
-          <div>
-            <Label htmlFor="continent">Continent</Label>
-            <Select value={continent} onValueChange={setContinent}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select continent" />
-              </SelectTrigger>
-              <SelectContent>
-                {continents.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Country</Label>
+            <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={comboboxOpen}
+                  className="w-full justify-between"
+                  type="button"
+                >
+                  {selectedCountry ? (
+                    <span className="flex items-center gap-2">
+                      <span>{selectedCountry.flag}</span>
+                      <span>{selectedCountry.name}</span>
+                      <span className="text-muted-foreground text-xs">({selectedCountry.continent})</span>
+                    </span>
+                  ) : (
+                    "Select country..."
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0">
+                <Command>
+                  <CommandInput placeholder="Search country..." />
+                  <CommandList>
+                    <CommandEmpty>No country found.</CommandEmpty>
+                    <CommandGroup>
+                      {allCountries.map((countryOption) => (
+                        <CommandItem
+                          key={countryOption.code}
+                          value={countryOption.name}
+                          onSelect={() => handleCountrySelect(countryOption)}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              selectedCountry?.name === countryOption.name ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          <span className="mr-2">{countryOption.flag}</span>
+                          <span>{countryOption.name}</span>
+                          <span className="ml-auto text-muted-foreground text-xs">{countryOption.continent}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {!country && familyMembers.length > 0 && (
