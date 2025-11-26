@@ -1,10 +1,11 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Globe, Trash2 } from "lucide-react";
+import { MapPin, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import FamilyMemberDialog from "./FamilyMemberDialog";
+import MemberCountriesDialog from "./MemberCountriesDialog";
+import type { Country } from "@/hooks/useFamilyData";
 
 interface FamilyMemberProps {
   id: string;
@@ -13,11 +14,17 @@ interface FamilyMemberProps {
   countriesVisited: number;
   avatar: string;
   color: string;
+  countries: Country[];
   onUpdate: () => void;
 }
 
-const FamilyMember = ({ id, name, role, countriesVisited, avatar, color, onUpdate }: FamilyMemberProps) => {
+const FamilyMember = ({ id, name, role, countriesVisited, avatar, color, countries, onUpdate }: FamilyMemberProps) => {
   const { toast } = useToast();
+
+  // Filter countries visited by this member
+  const memberCountries = countries.filter(country => 
+    country.visitedBy.includes(name)
+  );
 
   const handleDelete = async () => {
     if (!confirm(`Are you sure you want to delete ${name}?`)) return;
@@ -54,14 +61,12 @@ const FamilyMember = ({ id, name, role, countriesVisited, avatar, color, onUpdat
           </div>
           
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Globe className="w-5 h-5 text-primary" />
-                <span className="text-sm font-medium">Countries</span>
-              </div>
-              <Badge variant="secondary" className="font-bold">
-                {countriesVisited}
-              </Badge>
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <MemberCountriesDialog 
+                memberName={name}
+                countries={memberCountries}
+                countriesCount={countriesVisited}
+              />
             </div>
             
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
