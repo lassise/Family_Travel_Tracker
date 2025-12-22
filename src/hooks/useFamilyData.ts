@@ -21,6 +21,7 @@ export interface Country {
 export const useFamilyData = () => {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
+  const [wishlist, setWishlist] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -53,6 +54,13 @@ export const useFamilyData = () => {
 
       if (visitsError) throw visitsError;
 
+      // Fetch wishlist
+      const { data: wishlistData, error: wishlistError } = await supabase
+        .from("country_wishlist")
+        .select("country_id");
+
+      if (wishlistError) throw wishlistError;
+
       // Calculate countries visited per family member
       const membersWithCount = membersData?.map((member) => {
         const visitCount = visitsData?.filter(
@@ -70,8 +78,12 @@ export const useFamilyData = () => {
         return { ...country, visitedBy };
       }) || [];
 
+      // Extract wishlist country IDs
+      const wishlistIds = wishlistData?.map(w => w.country_id).filter(Boolean) as string[] || [];
+
       setFamilyMembers(membersWithCount);
       setCountries(countriesWithVisits);
+      setWishlist(wishlistIds);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -100,6 +112,11 @@ export const useFamilyData = () => {
         { event: '*', schema: 'public', table: 'country_visits' },
         () => fetchData()
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'country_wishlist' },
+        () => fetchData()
+      )
       .subscribe();
 
     return () => {
@@ -113,6 +130,7 @@ export const useFamilyData = () => {
   return { 
     familyMembers, 
     countries, 
+    wishlist,
     loading, 
     refetch: fetchData,
     totalContinents 

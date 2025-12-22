@@ -3,11 +3,12 @@ import FamilyMember from "@/components/FamilyMember";
 import CountryTracker from "@/components/CountryTracker";
 import TravelStats from "@/components/TravelStats";
 import ContinentFilter from "@/components/ContinentFilter";
+import CountryWishlist from "@/components/CountryWishlist";
 import FamilyMemberDialog from "@/components/FamilyMemberDialog";
 import { useFamilyData } from "@/hooks/useFamilyData";
 
 const Index = () => {
-  const { familyMembers, countries, loading, refetch, totalContinents } = useFamilyData();
+  const { familyMembers, countries, wishlist, loading, refetch, totalContinents } = useFamilyData();
 
   if (loading) {
     return (
@@ -44,6 +45,14 @@ const Index = () => {
         familyMembers={familyMembers}
         onUpdate={refetch}
       />
+
+      <section className="py-12 container mx-auto px-4">
+        <CountryWishlist 
+          countries={countries}
+          wishlist={wishlist}
+          onUpdate={refetch}
+        />
+      </section>
       
       <section className="py-20 container mx-auto px-4">
         <div className="text-center mb-12">

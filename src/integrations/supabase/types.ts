@@ -74,6 +74,32 @@ export type Database = {
           },
         ]
       }
+      country_wishlist: {
+        Row: {
+          country_id: string | null
+          created_at: string
+          id: string
+        }
+        Insert: {
+          country_id?: string | null
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          country_id?: string | null
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "country_wishlist_country_id_fkey"
+            columns: ["country_id"]
+            isOneToOne: true
+            referencedRelation: "countries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       family_members: {
         Row: {
           avatar: string
