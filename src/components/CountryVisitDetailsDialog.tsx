@@ -32,13 +32,12 @@ import {
 } from "@/components/ui/popover";
 import { getCitiesForCountry } from "@/lib/citiesData";
 import { differenceInDays, parseISO, isAfter, format } from "date-fns";
-import { DateRange } from "react-day-picker";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { TravelDatePicker } from "@/components/TravelDatePicker";
 
 // Calculate days between two dates (inclusive)
 const calculateDays = (startDate: string | null, endDate: string | null): number | null => {
@@ -286,18 +285,7 @@ const NewVisitCard = ({
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 50 }, (_, i) => currentYear - i);
 
-  const dateRange: DateRange | undefined =
-    draft.visitDate || draft.endDate
-      ? {
-          from: draft.visitDate ? parseISO(draft.visitDate) : undefined,
-          to: draft.endDate ? parseISO(draft.endDate) : undefined,
-        }
-      : undefined;
-
-  const handleDateRangeChange = (range: DateRange | undefined) => {
-    const startDate = range?.from ? format(range.from, "yyyy-MM-dd") : null;
-    const endDate = range?.to ? format(range.to, "yyyy-MM-dd") : null;
-    
+  const handleDateChange = (startDate: string | null, endDate: string | null) => {
     let numberOfDays = draft.numberOfDays;
     if (startDate && endDate) {
       const calculated = calculateDays(startDate, endDate);
@@ -408,38 +396,11 @@ const NewVisitCard = ({
           ) : (
             <div>
               <Label className="text-xs mb-1 block">Travel Dates</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal h-9"
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {dateRange?.from ? (
-                      dateRange.to ? (
-                        <>
-                          {format(dateRange.from, "MMM d, yyyy")} - {format(dateRange.to, "MMM d, yyyy")}
-                        </>
-                      ) : (
-                        format(dateRange.from, "MMM d, yyyy")
-                      )
-                    ) : (
-                      <span className="text-muted-foreground">Pick travel dates</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarComponent
-                    initialFocus
-                    mode="range"
-                    defaultMonth={dateRange?.from}
-                    selected={dateRange}
-                    onSelect={handleDateRangeChange}
-                    numberOfMonths={2}
-                    className="pointer-events-auto"
-                  />
-                </PopoverContent>
-              </Popover>
+              <TravelDatePicker
+                startDate={draft.visitDate}
+                endDate={draft.endDate}
+                onSave={handleDateChange}
+              />
             </div>
           )}
 
@@ -498,7 +459,6 @@ const CountryVisitDetailsDialog = ({
   const [newVisits, setNewVisits] = useState<NewVisitDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [expandedVisits, setExpandedVisits] = useState<Set<string>>(new Set());
-  const [tempDateRanges, setTempDateRanges] = useState<Record<string, DateRange | undefined>>({});
   const { toast } = useToast();
 
   const cities = getCitiesForCountry(countryCode);
@@ -807,30 +767,12 @@ const CountryVisitDetailsDialog = ({
                 <div className="space-y-2">
                   {visitDetails.map((visit, index) => {
                     const isExpanded = expandedVisits.has(visit.id);
-                    const dateRange: DateRange | undefined =
-                      visit.visit_date || visit.end_date
-                        ? {
-                            from: visit.visit_date ? parseISO(visit.visit_date) : undefined,
-                            to: visit.end_date ? parseISO(visit.end_date) : undefined,
-                          }
-                        : undefined;
-
-                    const displayedRange = tempDateRanges[visit.id] ?? dateRange;
 
                     const hasDateRange = visit.visit_date && visit.end_date;
                     const isAutoCalculated = hasDateRange && calculateDays(visit.visit_date, visit.end_date) !== null;
                     const isApproximate = visit.is_approximate || false;
 
-                    const handleDateRangeChange = async (range: DateRange | undefined) => {
-                      setTempDateRanges((prev) => ({ ...prev, [visit.id]: range }));
-
-                      // In range mode, react-day-picker calls onSelect after *each* click.
-                      // Only persist once the user has picked both start + end.
-                      if (!range?.from || !range?.to) return;
-
-                      const startDate = format(range.from, "yyyy-MM-dd");
-                      const endDate = format(range.to, "yyyy-MM-dd");
-
+                    const handleVisitDateSave = async (startDate: string | null, endDate: string | null) => {
                       let updateData: Record<string, string | number | null | boolean> = {
                         visit_date: startDate,
                         end_date: endDate,
@@ -839,9 +781,11 @@ const CountryVisitDetailsDialog = ({
                         approximate_year: null,
                       };
 
-                      const calculatedDays = calculateDays(startDate, endDate);
-                      if (calculatedDays) {
-                        updateData.number_of_days = calculatedDays;
+                      if (startDate && endDate) {
+                        const calculatedDays = calculateDays(startDate, endDate);
+                        if (calculatedDays) {
+                          updateData.number_of_days = calculatedDays;
+                        }
                       }
 
                       const { error } = await supabase
@@ -852,10 +796,6 @@ const CountryVisitDetailsDialog = ({
                       if (error) {
                         toast({ title: "Error updating dates", variant: "destructive" });
                       } else {
-                        setTempDateRanges((prev) => {
-                          const { [visit.id]: _removed, ...rest } = prev;
-                          return rest;
-                        });
                         fetchData();
                       }
                     };
@@ -1029,48 +969,11 @@ const CountryVisitDetailsDialog = ({
                                 ) : (
                                   <div>
                                     <Label className="text-xs mb-1 block">Travel Dates</Label>
-                                    <Popover
-                                      onOpenChange={(isOpen) => {
-                                        if (!isOpen) {
-                                          setTempDateRanges((prev) => {
-                                            const { [visit.id]: _removed, ...rest } = prev;
-                                            return rest;
-                                          });
-                                        }
-                                      }}
-                                    >
-                                      <PopoverTrigger asChild>
-                                        <Button
-                                          variant="outline"
-                                          className="w-full justify-start text-left font-normal h-9"
-                                        >
-                                          <Calendar className="mr-2 h-4 w-4" />
-                                          {displayedRange?.from ? (
-                                            displayedRange.to ? (
-                                              <>
-                                                {format(displayedRange.from, "MMM d, yyyy")} -{" "}
-                                                {format(displayedRange.to, "MMM d, yyyy")}
-                                              </>
-                                            ) : (
-                                              format(displayedRange.from, "MMM d, yyyy")
-                                            )
-                                          ) : (
-                                            <span className="text-muted-foreground">Pick travel dates</span>
-                                          )}
-                                        </Button>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="w-auto p-0" align="start">
-                                        <CalendarComponent
-                                          initialFocus
-                                          mode="range"
-                                          defaultMonth={displayedRange?.from}
-                                          selected={displayedRange}
-                                          onSelect={handleDateRangeChange}
-                                          numberOfMonths={2}
-                                          className="pointer-events-auto"
-                                        />
-                                      </PopoverContent>
-                                    </Popover>
+                                    <TravelDatePicker
+                                      startDate={visit.visit_date}
+                                      endDate={visit.end_date}
+                                      onSave={handleVisitDateSave}
+                                    />
                                   </div>
                                 )}
 
