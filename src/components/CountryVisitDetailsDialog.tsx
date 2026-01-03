@@ -44,6 +44,77 @@ const calculateDays = (startDate: string | null, endDate: string | null): number
   return differenceInDays(end, start) + 1; // +1 to make it inclusive
 };
 
+// Debounced input component for trip name
+const TripNameInput = ({ 
+  visitId, 
+  initialValue, 
+  onSave 
+}: { 
+  visitId: string; 
+  initialValue: string; 
+  onSave: (value: string) => void;
+}) => {
+  const [value, setValue] = useState(initialValue);
+  
+  useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue]);
+
+  return (
+    <Input
+      type="text"
+      placeholder="e.g., Trip with In-laws"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        if (value !== initialValue) {
+          onSave(value);
+        }
+      }}
+      className="h-8 text-sm"
+    />
+  );
+};
+
+// Debounced input component for days
+const DaysInput = ({ 
+  visitId, 
+  initialValue, 
+  disabled,
+  onSave 
+}: { 
+  visitId: string; 
+  initialValue: number; 
+  disabled: boolean;
+  onSave: (value: number) => void;
+}) => {
+  const [value, setValue] = useState(initialValue.toString());
+  
+  useEffect(() => {
+    setValue(initialValue.toString());
+  }, [initialValue]);
+
+  return (
+    <Input
+      type="number"
+      min={1}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        const numValue = parseInt(value) || 1;
+        const finalValue = numValue < 1 ? 1 : numValue;
+        if (finalValue !== initialValue) {
+          onSave(finalValue);
+        }
+        setValue(finalValue.toString());
+      }}
+      disabled={disabled}
+      className={`h-8 text-sm ${disabled ? "bg-muted cursor-not-allowed" : ""}`}
+      placeholder="Enter days"
+    />
+  );
+};
+
 interface VisitDetail {
   id: string;
   country_id: string;
@@ -429,12 +500,10 @@ const CountryVisitDetailsDialog = ({
                           {/* Trip Name */}
                           <div className="mb-3">
                             <Label className="text-xs mb-1 block">Trip Name (optional)</Label>
-                            <Input
-                              type="text"
-                              placeholder="e.g., Trip with In-laws"
-                              value={visit.notes || ""}
-                              onChange={(e) => handleUpdateVisit(visit.id, "notes", e.target.value || null)}
-                              className="h-8 text-sm"
+                            <TripNameInput
+                              visitId={visit.id}
+                              initialValue={visit.notes || ""}
+                              onSave={(value) => handleUpdateVisit(visit.id, "notes", value || null)}
                             />
                           </div>
 
@@ -539,27 +608,11 @@ const CountryVisitDetailsDialog = ({
                                   </span>
                                 )}
                               </div>
-                              <Input
-                                type="number"
-                                min={1}
-                                value={visit.number_of_days === 0 ? "" : visit.number_of_days || ""}
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  handleUpdateVisit(
-                                    visit.id,
-                                    "number_of_days",
-                                    value === "" ? 1 : parseInt(value) || 1
-                                  );
-                                }}
-                                onBlur={(e) => {
-                                  // Ensure at least 1 on blur
-                                  if (!e.target.value || parseInt(e.target.value) < 1) {
-                                    handleUpdateVisit(visit.id, "number_of_days", 1);
-                                  }
-                                }}
+                              <DaysInput
+                                visitId={visit.id}
+                                initialValue={visit.number_of_days}
                                 disabled={!isApproximate && isAutoCalculated}
-                                className={`h-8 text-sm ${!isApproximate && isAutoCalculated ? "bg-muted cursor-not-allowed" : ""}`}
-                                placeholder="Enter days"
+                                onSave={(value) => handleUpdateVisit(visit.id, "number_of_days", value)}
                               />
                               {isApproximate && (
                                 <p className="text-xs text-muted-foreground mt-1">
