@@ -2,6 +2,575 @@
 // This list covers popular travel destinations worldwide
 
 const citiesByCountry: Record<string, string[]> = {
+  // Afghanistan
+  AF: [
+    "Kabul", "Kandahar", "Herat", "Mazar-i-Sharif", "Jalalabad", "Kunduz",
+    "Ghazni", "Balkh", "Bamiyan", "Faizabad", "Lashkar Gah", "Taloqan",
+    "Puli Khumri", "Sheberghan", "Charikar", "Mehtarlam", "Gardez",
+    "Band-e-Amir", "Panjshir Valley", "Wakhan Corridor", "Nuristan"
+  ],
+  // Albania - already exists at AL
+  // Algeria
+  DZ: [
+    "Algiers", "Oran", "Constantine", "Annaba", "Blida", "Batna", "Sétif",
+    "Djelfa", "Tlemcen", "Bejaia", "Ghardaia", "Timimoun", "Tamanrasset",
+    "Djanet", "Tassili n'Ajjer", "Tipaza", "Djémila", "Timgad"
+  ],
+  // Angola
+  AO: [
+    "Luanda", "Huambo", "Lobito", "Benguela", "Lubango", "Namibe",
+    "Malanje", "Cabinda", "Kuito", "Soyo", "Tombwa", "Kissama National Park"
+  ],
+  // Antigua and Barbuda
+  AG: [
+    "St. John's", "English Harbour", "Jolly Harbour", "Dickenson Bay",
+    "Nelson's Dockyard", "Barbuda", "Half Moon Bay"
+  ],
+  // Armenia - already exists at AM
+  // Aruba
+  AW: [
+    "Oranjestad", "San Nicolas", "Palm Beach", "Eagle Beach", "Arikok National Park",
+    "Baby Beach", "Natural Bridge", "California Lighthouse"
+  ],
+  // Austria - already exists at AT
+  // Azerbaijan - already exists at AZ
+  // Bahamas
+  BS: [
+    "Nassau", "Freeport", "Paradise Island", "Exuma", "Eleuthera",
+    "Harbour Island", "Andros", "Bimini", "Long Island", "Cat Island",
+    "San Salvador", "Atlantis", "Cable Beach", "Pig Beach"
+  ],
+  // Bahrain - already exists at BH
+  // Bangladesh
+  BD: [
+    "Dhaka", "Chittagong", "Khulna", "Rajshahi", "Sylhet", "Rangpur",
+    "Cox's Bazar", "Sundarbans", "Srimangal", "Paharpur", "Bagerhat",
+    "Rangamati", "Bandarban", "Saint Martin's Island", "Sonargaon"
+  ],
+  // Barbados
+  BB: [
+    "Bridgetown", "Speightstown", "Holetown", "Oistins", "Bathsheba",
+    "St. Lawrence Gap", "Crane Beach", "Harrison's Cave", "Carlisle Bay"
+  ],
+  // Belarus - already exists at BY
+  // Belgium - already exists at BE
+  // Belize - already exists at BZ
+  // Benin
+  BJ: [
+    "Cotonou", "Porto-Novo", "Parakou", "Djougou", "Ouidah", "Abomey",
+    "Ganvié", "Natitingou", "Pendjari National Park"
+  ],
+  // Bermuda
+  BM: [
+    "Hamilton", "St. George's", "Somerset Village", "Horseshoe Bay",
+    "Elbow Beach", "Crystal Caves", "Royal Naval Dockyard"
+  ],
+  // Bhutan
+  BT: [
+    "Thimphu", "Paro", "Punakha", "Bumthang", "Wangdue Phodrang",
+    "Tiger's Nest", "Trongsa", "Haa", "Phobjikha Valley", "Dochula Pass"
+  ],
+  // Bolivia - already exists at BO
+  // Bosnia and Herzegovina - already exists at BA
+  // Botswana
+  BW: [
+    "Gaborone", "Francistown", "Maun", "Kasane", "Palapye", "Serowe",
+    "Okavango Delta", "Chobe National Park", "Makgadikgadi Pans",
+    "Moremi Game Reserve", "Kalahari Desert", "Tsodilo Hills"
+  ],
+  // Brazil - already exists at BR
+  // Brunei
+  BN: [
+    "Bandar Seri Begawan", "Kuala Belait", "Seria", "Tutong",
+    "Ulu Temburong National Park", "Kampong Ayer", "Jerudong Park"
+  ],
+  // Bulgaria - already exists at BG
+  // Burkina Faso
+  BF: [
+    "Ouagadougou", "Bobo-Dioulasso", "Koudougou", "Banfora",
+    "Sindou Peaks", "Ruins of Loropéni", "Nazinga Game Ranch"
+  ],
+  // Burundi
+  BI: [
+    "Bujumbura", "Gitega", "Muyinga", "Ngozi", "Rumonge",
+    "Lake Tanganyika", "Kibira National Park", "Source of the Nile"
+  ],
+  // Cabo Verde (Cape Verde)
+  CV: [
+    "Praia", "Mindelo", "Santa Maria", "Espargos", "São Filipe",
+    "Sal", "Boa Vista", "Santo Antão", "Fogo", "São Vicente"
+  ],
+  // Cambodia - already exists at KH
+  // Cameroon
+  CM: [
+    "Yaoundé", "Douala", "Garoua", "Bamenda", "Maroua", "Kribi",
+    "Limbe", "Buea", "Mount Cameroon", "Waza National Park", "Dja Reserve"
+  ],
+  // Canada - already exists at CA
+  // Central African Republic
+  CF: [
+    "Bangui", "Bimbo", "Berbérati", "Bozoum", "Dzanga-Sangha"
+  ],
+  // Chad
+  TD: [
+    "N'Djamena", "Moundou", "Sarh", "Abéché", "Faya-Largeau",
+    "Zakouma National Park", "Lake Chad", "Ennedi Plateau"
+  ],
+  // Chile - already exists at CL
+  // China - already exists at CN
+  // Colombia - already exists at CO
+  // Comoros
+  KM: [
+    "Moroni", "Mutsamudu", "Fomboni", "Grande Comore", "Mohéli", "Anjouan"
+  ],
+  // Congo (Republic)
+  CG: [
+    "Brazzaville", "Pointe-Noire", "Dolisie", "Nkayi", "Odzala National Park"
+  ],
+  // Congo (DRC)
+  CD: [
+    "Kinshasa", "Lubumbashi", "Mbuji-Mayi", "Kisangani", "Goma",
+    "Virunga National Park", "Bukavu", "Kahuzi-Biéga", "Garamba"
+  ],
+  // Costa Rica - already exists at CR
+  // Côte d'Ivoire (Ivory Coast)
+  CI: [
+    "Abidjan", "Bouaké", "Daloa", "Yamoussoukro", "San-Pédro",
+    "Grand-Bassam", "Assinie", "Korhogo", "Man", "Taï National Park"
+  ],
+  // Croatia - already exists at HR
+  // Cuba - already exists at CU
+  // Curaçao
+  CW: [
+    "Willemstad", "Westpunt", "Jan Thiel", "Mambo Beach",
+    "Shete Boka National Park", "Playa Kenepa", "Christoffel Park"
+  ],
+  // Cyprus - already exists at CY
+  // Czech Republic - already exists at CZ
+  // Denmark - already exists at DK
+  // Djibouti
+  DJ: [
+    "Djibouti City", "Ali Sabieh", "Tadjoura", "Obock",
+    "Lake Assal", "Lake Abbe", "Day Forest National Park"
+  ],
+  // Dominica
+  DM: [
+    "Roseau", "Portsmouth", "Marigot", "Calibishie", "Trafalgar Falls",
+    "Boiling Lake", "Morne Trois Pitons", "Champagne Reef"
+  ],
+  // Dominican Republic - already exists at DO
+  // Ecuador - already exists at EC
+  // Egypt - already exists at EG
+  // El Salvador - already exists at SV
+  // Equatorial Guinea
+  GQ: [
+    "Malabo", "Bata", "Ebebiyin", "Bioko Island", "Monte Alén"
+  ],
+  // Eritrea
+  ER: [
+    "Asmara", "Massawa", "Keren", "Assab", "Dahlak Archipelago"
+  ],
+  // Estonia - already exists at EE
+  // Eswatini (Swaziland)
+  SZ: [
+    "Mbabane", "Manzini", "Lobamba", "Mlilwane", "Hlane Royal National Park",
+    "Mkhaya Game Reserve", "Malolotja Nature Reserve"
+  ],
+  // Ethiopia
+  ET: [
+    "Addis Ababa", "Dire Dawa", "Gondar", "Mekelle", "Bahir Dar",
+    "Lalibela", "Axum", "Harar", "Simien Mountains", "Danakil Depression",
+    "Omo Valley", "Lake Tana", "Blue Nile Falls", "Bale Mountains"
+  ],
+  // Fiji - already exists at FJ
+  // Finland - already exists at FI
+  // France - already exists at FR
+  // Gabon
+  GA: [
+    "Libreville", "Port-Gentil", "Franceville", "Oyem",
+    "Lopé National Park", "Ivindo National Park", "Loango National Park"
+  ],
+  // Gambia
+  GM: [
+    "Banjul", "Serekunda", "Brikama", "Bakau", "Kololi",
+    "Kunta Kinteh Island", "Makasutu", "Abuko Nature Reserve"
+  ],
+  // Georgia - already exists at GE
+  // Germany - already exists at DE
+  // Ghana
+  GH: [
+    "Accra", "Kumasi", "Tamale", "Sekondi-Takoradi", "Cape Coast",
+    "Elmina", "Ada Foah", "Mole National Park", "Kakum National Park"
+  ],
+  // Greece - already exists at GR
+  // Greenland
+  GL: [
+    "Nuuk", "Ilulissat", "Sisimiut", "Qaqortoq", "Uummannaq",
+    "Kangerlussuaq", "Tasiilaq", "Disko Bay", "Scoresby Sound"
+  ],
+  // Grenada
+  GD: [
+    "St. George's", "Grenville", "Gouyave", "Grand Anse Beach",
+    "Carriacou", "Petite Martinique", "Grand Etang"
+  ],
+  // Guatemala - already exists at GT
+  // Guinea
+  GN: [
+    "Conakry", "Nzérékoré", "Kindia", "Labé", "Kankan",
+    "Fouta Djallon", "Mount Nimba", "Îles de Los"
+  ],
+  // Guinea-Bissau
+  GW: [
+    "Bissau", "Bafatá", "Gabú", "Cacheu", "Bijagós Archipelago"
+  ],
+  // Guyana
+  GY: [
+    "Georgetown", "Linden", "New Amsterdam", "Bartica",
+    "Kaieteur Falls", "Iwokrama Forest", "Rupununi Savanna"
+  ],
+  // Haiti
+  HT: [
+    "Port-au-Prince", "Cap-Haïtien", "Jacmel", "Les Cayes",
+    "Citadelle Laferrière", "Labadee", "Île-à-Vache", "Saut-Mathurine"
+  ],
+  // Honduras - already exists at HN
+  // Hungary - already exists at HU
+  // Iceland - already exists at IS
+  // India - already exists at IN
+  // Indonesia - already exists at ID
+  // Iran
+  IR: [
+    "Tehran", "Mashhad", "Isfahan", "Shiraz", "Tabriz", "Karaj",
+    "Yazd", "Kerman", "Persepolis", "Pasargadae", "Nasir al-Mulk Mosque",
+    "Naqsh-e Jahan Square", "Golestan Palace", "Dasht-e Kavir"
+  ],
+  // Iraq
+  IQ: [
+    "Baghdad", "Basra", "Mosul", "Erbil", "Sulaymaniyah", "Kirkuk",
+    "Najaf", "Karbala", "Samarra", "Babylon", "Ur", "Hatra"
+  ],
+  // Ireland - already exists at IE
+  // Israel - already exists at IL
+  // Italy - already exists at IT
+  // Jamaica - already exists at JM
+  // Japan - already exists at JP
+  // Jordan - already exists at JO
+  // Kazakhstan
+  KZ: [
+    "Almaty", "Nur-Sultan (Astana)", "Shymkent", "Karaganda", "Aktobe",
+    "Turkestan", "Charyn Canyon", "Kolsai Lakes", "Big Almaty Lake",
+    "Altyn-Emel", "Baikonur", "Medeu", "Shymbulak"
+  ],
+  // Kenya - already exists at KE
+  // Kiribati
+  KI: [
+    "South Tarawa", "Betio", "Bairiki", "Christmas Island", "Fanning Island"
+  ],
+  // North Korea
+  KP: [
+    "Pyongyang", "Hamhung", "Nampo", "Wonsan", "Kaesong",
+    "Mount Paektu", "Kumgang Mountains", "Rason"
+  ],
+  // South Korea - already exists at KR
+  // Kosovo - already exists at XK
+  // Kuwait - already exists at KW
+  // Kyrgyzstan
+  KG: [
+    "Bishkek", "Osh", "Karakol", "Jalal-Abad", "Tokmok",
+    "Issyk-Kul Lake", "Song Kol Lake", "Ala Archa", "Tash Rabat"
+  ],
+  // Laos - already exists at LA
+  // Latvia - already exists at LV
+  // Lebanon - already exists at LB
+  // Lesotho
+  LS: [
+    "Maseru", "Teyateyaneng", "Mafeteng", "Hlotse",
+    "Semonkong", "Malealea", "Sehlabathebe National Park", "Katse Dam"
+  ],
+  // Liberia
+  LR: [
+    "Monrovia", "Gbarnga", "Buchanan", "Harper", "Sapo National Park"
+  ],
+  // Libya
+  LY: [
+    "Tripoli", "Benghazi", "Misrata", "Sabha", "Tobruk",
+    "Leptis Magna", "Sabratha", "Ghadames", "Akakus Mountains"
+  ],
+  // Liechtenstein - already exists at LI
+  // Lithuania - already exists at LT
+  // Luxembourg - already exists at LU
+  // Madagascar
+  MG: [
+    "Antananarivo", "Toamasina", "Antsirabe", "Fianarantsoa", "Mahajanga",
+    "Nosy Be", "Île Sainte-Marie", "Andasibe", "Tsingy de Bemaraha",
+    "Isalo National Park", "Ranomafana", "Morondava", "Avenue of the Baobabs"
+  ],
+  // Malawi
+  MW: [
+    "Lilongwe", "Blantyre", "Mzuzu", "Zomba", "Lake Malawi",
+    "Cape Maclear", "Likoma Island", "Liwonde National Park"
+  ],
+  // Malaysia - already exists at MY
+  // Maldives - already exists at MV
+  // Mali
+  ML: [
+    "Bamako", "Sikasso", "Ségou", "Mopti", "Timbuktu",
+    "Djenné", "Bandiagara", "Pays Dogon"
+  ],
+  // Malta - already exists at MT
+  // Marshall Islands
+  MH: [
+    "Majuro", "Ebeye", "Bikini Atoll", "Arno Atoll"
+  ],
+  // Mauritania
+  MR: [
+    "Nouakchott", "Nouadhibou", "Kaédi", "Atar", "Chinguetti",
+    "Banc d'Arguin", "Adrar Plateau", "Oualata"
+  ],
+  // Mauritius - already exists at MU
+  // Mexico - already exists at MX
+  // Micronesia
+  FM: [
+    "Palikir", "Weno", "Pohnpei", "Kosrae", "Yap", "Nan Madol"
+  ],
+  // Moldova - already exists at MD
+  // Monaco - already exists at MC
+  // Mongolia
+  MN: [
+    "Ulaanbaatar", "Erdenet", "Darkhan", "Choibalsan",
+    "Gobi Desert", "Khuvsgul Lake", "Karakorum", "Terelj", "Altai Mountains"
+  ],
+  // Montenegro - already exists at ME
+  // Morocco - already exists at MA
+  // Mozambique
+  MZ: [
+    "Maputo", "Beira", "Nampula", "Quelimane", "Pemba",
+    "Tofo Beach", "Bazaruto Archipelago", "Inhambane",
+    "Gorongosa National Park", "Mozambique Island"
+  ],
+  // Myanmar - already exists at MM
+  // Namibia
+  NA: [
+    "Windhoek", "Swakopmund", "Walvis Bay", "Rundu", "Oshakati",
+    "Etosha National Park", "Sossusvlei", "Fish River Canyon",
+    "Skeleton Coast", "Kolmanskop", "Damaraland", "Spitzkoppe"
+  ],
+  // Nauru
+  NR: [
+    "Yaren", "Denigomodu", "Aiwo", "Buada Lagoon"
+  ],
+  // Nepal - already exists at NP
+  // Netherlands - already exists at NL
+  // New Caledonia - already exists at NC
+  // New Zealand - already exists at NZ
+  // Nicaragua - already exists at NI
+  // Niger
+  NE: [
+    "Niamey", "Zinder", "Maradi", "Agadez", "Tahoua",
+    "W National Park", "Aïr Mountains", "Ténéré Desert"
+  ],
+  // Nigeria
+  NG: [
+    "Lagos", "Abuja", "Kano", "Ibadan", "Port Harcourt", "Benin City",
+    "Calabar", "Enugu", "Kaduna", "Oshogbo", "Yankari National Park"
+  ],
+  // North Macedonia - already exists at MK
+  // Norway - already exists at NO
+  // Oman - already exists at OM
+  // Pakistan
+  PK: [
+    "Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Peshawar",
+    "Hunza Valley", "Gilgit", "Skardu", "Swat Valley", "Taxila",
+    "Mohenjo-daro", "Fairy Meadows", "K2 Base Camp", "Multan"
+  ],
+  // Palau
+  PW: [
+    "Ngerulmud", "Koror", "Rock Islands", "Jellyfish Lake", "Peleliu"
+  ],
+  // Palestine
+  PS: [
+    "Jerusalem", "Ramallah", "Gaza City", "Bethlehem", "Nablus",
+    "Hebron", "Jericho", "Dead Sea"
+  ],
+  // Panama - already exists at PA
+  // Papua New Guinea - already exists at PG
+  // Paraguay - already exists at PY
+  // Peru - already exists at PE
+  // Philippines - already exists at PH
+  // Poland - already exists at PL
+  // Portugal - already exists at PT
+  // Qatar - already exists at QA
+  // Romania - already exists at RO
+  // Russia - already exists at RU
+  // Rwanda
+  RW: [
+    "Kigali", "Butare", "Gisenyi", "Ruhengeri", "Volcanoes National Park",
+    "Lake Kivu", "Akagera National Park", "Nyungwe Forest"
+  ],
+  // Saint Kitts and Nevis
+  KN: [
+    "Basseterre", "Charlestown", "Brimstone Hill", "Nevis Peak",
+    "Frigate Bay", "Cockleshell Beach"
+  ],
+  // Saint Lucia
+  LC: [
+    "Castries", "Soufrière", "Rodney Bay", "Gros Islet", "Marigot Bay",
+    "Pitons", "Sulphur Springs", "Pigeon Island"
+  ],
+  // Saint Vincent and the Grenadines
+  VC: [
+    "Kingstown", "Bequia", "Mustique", "Canouan", "Tobago Cays",
+    "Union Island", "La Soufrière"
+  ],
+  // Samoa - already exists at WS
+  // San Marino - already exists at SM
+  // São Tomé and Príncipe
+  ST: [
+    "São Tomé", "Santo António", "Príncipe", "Bom Bom Island",
+    "Pico Cão Grande", "Obo National Park"
+  ],
+  // Saudi Arabia - already exists at SA
+  // Senegal
+  SN: [
+    "Dakar", "Saint-Louis", "Thiès", "Touba", "Ziguinchor",
+    "Gorée Island", "Pink Lake", "Saloum Delta", "Casamance"
+  ],
+  // Serbia - already exists at RS
+  // Seychelles - already exists at SC
+  // Sierra Leone
+  SL: [
+    "Freetown", "Bo", "Kenema", "Makeni", "Bonthe",
+    "River No. 2 Beach", "Tiwai Island", "Banana Islands"
+  ],
+  // Singapore - already exists at SG
+  // Slovakia - already exists at SK
+  // Slovenia - already exists at SI
+  // Solomon Islands
+  SB: [
+    "Honiara", "Auki", "Gizo", "Munda", "Marovo Lagoon",
+    "Western Province", "Guadalcanal"
+  ],
+  // Somalia
+  SO: [
+    "Mogadishu", "Hargeisa", "Berbera", "Kismayo", "Bosaso", "Laas Geel"
+  ],
+  // South Africa - already exists at ZA
+  // South Sudan
+  SS: [
+    "Juba", "Wau", "Malakal", "Bor", "Sudd Wetlands"
+  ],
+  // Spain - already exists at ES
+  // Sri Lanka - already exists at LK
+  // Sudan
+  SD: [
+    "Khartoum", "Omdurman", "Port Sudan", "Kassala", "Wadi Halfa",
+    "Meroe", "Jebel Barkal", "Nuri Pyramids"
+  ],
+  // Suriname
+  SR: [
+    "Paramaribo", "Nieuw Nickerie", "Moengo", "Brownsweg",
+    "Raleighvallen", "Central Suriname Nature Reserve"
+  ],
+  // Sweden - already exists at SE
+  // Switzerland - already exists at CH
+  // Syria
+  SY: [
+    "Damascus", "Aleppo", "Homs", "Latakia", "Palmyra",
+    "Krak des Chevaliers", "Bosra", "Apamea"
+  ],
+  // Taiwan
+  TW: [
+    "Taipei", "Kaohsiung", "Taichung", "Tainan", "Hsinchu", "Keelung",
+    "Jiufen", "Taroko Gorge", "Sun Moon Lake", "Alishan", "Kenting",
+    "Yehliu", "Penghu", "Orchid Island", "Green Island"
+  ],
+  // Tajikistan
+  TJ: [
+    "Dushanbe", "Khujand", "Panjakent", "Khorog", "Pamir Highway",
+    "Iskanderkul", "Fann Mountains", "Wakhan Valley"
+  ],
+  // Tanzania - already exists at TZ
+  // Thailand - already exists at TH
+  // Timor-Leste (East Timor)
+  TL: [
+    "Dili", "Baucau", "Maliana", "Same", "Atauro Island",
+    "Jaco Island", "Mount Ramelau"
+  ],
+  // Togo
+  TG: [
+    "Lomé", "Sokodé", "Kara", "Kpalimé", "Atakpamé",
+    "Togoville", "Fazao-Malfakassa National Park"
+  ],
+  // Tonga - already exists at TO
+  // Trinidad and Tobago
+  TT: [
+    "Port of Spain", "San Fernando", "Chaguanas", "Scarborough",
+    "Maracas Bay", "Tobago", "Pigeon Point", "Pitch Lake", "Asa Wright"
+  ],
+  // Tunisia
+  TN: [
+    "Tunis", "Sfax", "Sousse", "Kairouan", "Gabès", "Bizerte",
+    "Sidi Bou Said", "Carthage", "Djerba", "Tozeur", "Douz",
+    "El Jem", "Dougga", "Chott el-Jerid"
+  ],
+  // Turkey - already exists at TR
+  // Turkmenistan
+  TM: [
+    "Ashgabat", "Türkmenbaşy", "Mary", "Merv", "Daşoguz",
+    "Darvaza Gas Crater", "Kow Ata", "Ancient Merv"
+  ],
+  // Turks and Caicos
+  TC: [
+    "Cockburn Town", "Providenciales", "Grace Bay", "Grand Turk",
+    "Salt Cay", "North Caicos", "Middle Caicos"
+  ],
+  // Tuvalu
+  TV: [
+    "Funafuti", "Vaiaku", "Nanumea", "Nukufetau"
+  ],
+  // Uganda
+  UG: [
+    "Kampala", "Entebbe", "Jinja", "Mbarara", "Gulu", "Fort Portal",
+    "Bwindi Impenetrable Forest", "Queen Elizabeth National Park",
+    "Murchison Falls", "Lake Bunyonyi", "Kibale National Park",
+    "Source of the Nile"
+  ],
+  // Ukraine - already exists at UA
+  // United Arab Emirates - already exists at AE
+  // United Kingdom - already exists at GB
+  // United States - already exists at US
+  // Uruguay - already exists at UY
+  // Uzbekistan
+  UZ: [
+    "Tashkent", "Samarkand", "Bukhara", "Khiva", "Fergana",
+    "Registan Square", "Shah-i-Zinda", "Itchan Kala", "Aral Sea"
+  ],
+  // Vanuatu - already exists at VU
+  // Vatican City - already exists at VA
+  // Venezuela
+  VE: [
+    "Caracas", "Maracaibo", "Valencia", "Barquisimeto", "Mérida",
+    "Angel Falls", "Los Roques", "Canaima National Park", "Margarita Island",
+    "Morrocoy", "Coro", "Orinoco Delta", "Gran Sabana", "Mount Roraima"
+  ],
+  // Vietnam - already exists at VN
+  // Yemen
+  YE: [
+    "Sana'a", "Aden", "Taiz", "Al Hudaydah", "Mukalla",
+    "Socotra Island", "Shibam", "Old City of Sana'a", "Shahara"
+  ],
+  // Zambia
+  ZM: [
+    "Lusaka", "Kitwe", "Ndola", "Livingstone", "Kabwe",
+    "Victoria Falls", "South Luangwa", "Lower Zambezi",
+    "Kafue National Park", "Lake Kariba", "Devil's Pool"
+  ],
+  // Zimbabwe
+  ZW: [
+    "Harare", "Bulawayo", "Mutare", "Gweru", "Victoria Falls",
+    "Hwange National Park", "Matobo Hills", "Great Zimbabwe",
+    "Mana Pools", "Lake Kariba", "Eastern Highlands"
+  ],
   US: [
     "New York City", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia",
     "San Antonio", "San Diego", "Dallas", "San Jose", "Austin", "Jacksonville",
