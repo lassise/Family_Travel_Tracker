@@ -55,17 +55,25 @@ const ACHIEVEMENTS: Achievement[] = [
 const AchievementsGoals = ({ countries, familyMembers, totalContinents }: AchievementsGoalsProps) => {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [earnedAchievements, setEarnedAchievements] = useState<string[]>([]);
+  const [achievementsLoaded, setAchievementsLoaded] = useState(false);
   const [isAddingGoal, setIsAddingGoal] = useState(false);
   const [newGoal, setNewGoal] = useState({ title: '', target_count: 5, goal_type: 'countries', deadline: '' });
   const { toast } = useToast();
 
   const visitedCountries = countries.filter(c => c.visitedBy.length > 0).length;
 
+  // Fetch existing data on mount
   useEffect(() => {
     fetchGoals();
     fetchAchievements();
-    checkAndAwardAchievements();
-  }, [visitedCountries, totalContinents]);
+  }, []);
+
+  // Check for new achievements only after existing ones are loaded
+  useEffect(() => {
+    if (achievementsLoaded) {
+      checkAndAwardAchievements();
+    }
+  }, [visitedCountries, totalContinents, achievementsLoaded]);
 
   const fetchGoals = async () => {
     const { data } = await supabase.from('travel_goals').select('*').order('created_at', { ascending: false });
@@ -74,26 +82,44 @@ const AchievementsGoals = ({ countries, familyMembers, totalContinents }: Achiev
 
   const fetchAchievements = async () => {
     const { data } = await supabase.from('user_achievements').select('achievement_key');
-    if (data) setEarnedAchievements(data.map(a => a.achievement_key));
+    if (data) {
+      setEarnedAchievements(data.map(a => a.achievement_key));
+    }
+    setAchievementsLoaded(true);
   };
 
   const checkAndAwardAchievements = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    const newlyEarned: string[] = [];
+
     for (const achievement of ACHIEVEMENTS) {
       const current = achievement.type === 'countries' ? visitedCountries : totalContinents;
-      if (current >= achievement.requirement && !earnedAchievements.includes(achievement.key)) {
-        await supabase.from('user_achievements').insert({
+      // Only award if not already earned (check both state and what we're about to add)
+      if (current >= achievement.requirement && 
+          !earnedAchievements.includes(achievement.key) && 
+          !newlyEarned.includes(achievement.key)) {
+        
+        // Try to insert - will fail silently if already exists due to unique constraint
+        const { error } = await supabase.from('user_achievements').insert({
           user_id: user.id,
           achievement_key: achievement.key,
         });
-        toast({
-          title: '🎉 Achievement Unlocked!',
-          description: `${achievement.name}: ${achievement.description}`,
-        });
-        setEarnedAchievements(prev => [...prev, achievement.key]);
+        
+        // Only show toast if insert succeeded (wasn't already in DB)
+        if (!error) {
+          newlyEarned.push(achievement.key);
+          toast({
+            title: '🎉 Achievement Unlocked!',
+            description: `${achievement.name}: ${achievement.description}`,
+          });
+        }
       }
+    }
+
+    if (newlyEarned.length > 0) {
+      setEarnedAchievements(prev => [...prev, ...newlyEarned]);
     }
   };
 
