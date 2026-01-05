@@ -5,11 +5,18 @@ import { useFamilyData } from "@/hooks/useFamilyData";
 import AppLayout from "@/components/layout/AppLayout";
 import FamilyMember from "@/components/FamilyMember";
 import CountryTracker from "@/components/CountryTracker";
-import TravelStats from "@/components/TravelStats";
-import ContinentFilter from "@/components/ContinentFilter";
 import CountryWishlist from "@/components/CountryWishlist";
 import FamilyMemberDialog from "@/components/FamilyMemberDialog";
+import InteractiveWorldMap from "@/components/travel/InteractiveWorldMap";
+import QuickStatsDashboard from "@/components/travel/QuickStatsDashboard";
+import ContinentProgressRings from "@/components/travel/ContinentProgressRings";
+import TravelTimeline from "@/components/travel/TravelTimeline";
+import AchievementsGoals from "@/components/travel/AchievementsGoals";
+import PhotoGallery from "@/components/travel/PhotoGallery";
+import TravelHeatmapCalendar from "@/components/travel/TravelHeatmapCalendar";
+import TripSuggestions from "@/components/travel/TripSuggestions";
 import { Loader2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const TravelHistory = () => {
   const { user, loading: authLoading } = useAuth();
@@ -38,32 +45,59 @@ const TravelHistory = () => {
   return (
     <AppLayout>
       <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            Our Travel History
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Track the countries your family has explored together
-          </p>
-        </div>
-
-        <TravelStats 
-          totalCountries={countries.length}
+        {/* Quick Stats Dashboard - Hero Section */}
+        <QuickStatsDashboard 
+          totalCountries={countries.filter(c => c.visitedBy.length > 0).length}
           totalContinents={totalContinents}
           familyMembers={familyMembers}
         />
 
-        <ContinentFilter 
-          countries={countries}
-          familyMembers={familyMembers}
-        />
+        {/* Interactive World Map */}
+        <div className="mb-8">
+          <InteractiveWorldMap countries={countries} wishlist={wishlist} />
+        </div>
 
+        {/* Progress and Insights Row */}
+        <div className="grid lg:grid-cols-2 gap-6 mb-8">
+          <ContinentProgressRings countries={countries} />
+          <TravelHeatmapCalendar />
+        </div>
+
+        {/* Achievements and Goals */}
+        <div className="mb-8">
+          <AchievementsGoals 
+            countries={countries} 
+            familyMembers={familyMembers}
+            totalContinents={totalContinents}
+          />
+        </div>
+
+        {/* Tabs for Timeline, Photos, and Suggestions */}
+        <Tabs defaultValue="timeline" className="mb-8">
+          <TabsList className="grid w-full grid-cols-3 max-w-md mx-auto">
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
+            <TabsTrigger value="photos">Photos</TabsTrigger>
+            <TabsTrigger value="suggestions">Next Trip</TabsTrigger>
+          </TabsList>
+          <TabsContent value="timeline" className="mt-6">
+            <TravelTimeline countries={countries} />
+          </TabsContent>
+          <TabsContent value="photos" className="mt-6">
+            <PhotoGallery countries={countries} />
+          </TabsContent>
+          <TabsContent value="suggestions" className="mt-6">
+            <TripSuggestions countries={countries} wishlist={wishlist} />
+          </TabsContent>
+        </Tabs>
+
+        {/* Country Tracker */}
         <CountryTracker 
           countries={countries} 
           familyMembers={familyMembers}
           onUpdate={refetch}
         />
 
+        {/* Wishlist Section */}
         <section className="py-12">
           <CountryWishlist 
             countries={countries}
@@ -72,6 +106,7 @@ const TravelHistory = () => {
           />
         </section>
         
+        {/* Family Members Section */}
         <section className="py-12">
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">

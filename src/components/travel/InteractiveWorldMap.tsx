@@ -1,0 +1,221 @@
+import React, { useEffect, useRef, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import { Country } from '@/hooks/useFamilyData';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Globe, MapPin } from 'lucide-react';
+
+// Country to ISO 3166-1 alpha-3 mapping for Mapbox
+const countryToISO3: Record<string, string> = {
+  'Afghanistan': 'AFG', 'Albania': 'ALB', 'Algeria': 'DZA', 'Argentina': 'ARG',
+  'Australia': 'AUS', 'Austria': 'AUT', 'Bangladesh': 'BGD', 'Belgium': 'BEL',
+  'Brazil': 'BRA', 'Canada': 'CAN', 'Chile': 'CHL', 'China': 'CHN',
+  'Colombia': 'COL', 'Croatia': 'HRV', 'Czech Republic': 'CZE', 'Denmark': 'DNK',
+  'Egypt': 'EGY', 'Finland': 'FIN', 'France': 'FRA', 'Germany': 'DEU',
+  'Greece': 'GRC', 'Hungary': 'HUN', 'Iceland': 'ISL', 'India': 'IND',
+  'Indonesia': 'IDN', 'Iran': 'IRN', 'Iraq': 'IRQ', 'Ireland': 'IRL',
+  'Israel': 'ISR', 'Italy': 'ITA', 'Japan': 'JPN', 'Jordan': 'JOR',
+  'Kenya': 'KEN', 'Malaysia': 'MYS', 'Mexico': 'MEX', 'Morocco': 'MAR',
+  'Nepal': 'NPL', 'Netherlands': 'NLD', 'New Zealand': 'NZL', 'Nigeria': 'NGA',
+  'Norway': 'NOR', 'Pakistan': 'PAK', 'Peru': 'PER', 'Philippines': 'PHL',
+  'Poland': 'POL', 'Portugal': 'PRT', 'Romania': 'ROU', 'Russia': 'RUS',
+  'Saudi Arabia': 'SAU', 'Singapore': 'SGP', 'South Africa': 'ZAF',
+  'South Korea': 'KOR', 'Spain': 'ESP', 'Sweden': 'SWE', 'Switzerland': 'CHE',
+  'Thailand': 'THA', 'Turkey': 'TUR', 'Ukraine': 'UKR', 'United Arab Emirates': 'ARE',
+  'United Kingdom': 'GBR', 'United States': 'USA', 'Vietnam': 'VNM',
+  'Ecuador': 'ECU', 'Venezuela': 'VEN', 'Cuba': 'CUB', 'Panama': 'PAN',
+  'Costa Rica': 'CRI', 'Guatemala': 'GTM', 'Honduras': 'HND', 'Nicaragua': 'NIC',
+  'El Salvador': 'SLV', 'Belize': 'BLZ', 'Jamaica': 'JAM', 'Haiti': 'HTI',
+  'Dominican Republic': 'DOM', 'Puerto Rico': 'PRI', 'Trinidad and Tobago': 'TTO',
+  'Bahamas': 'BHS', 'Barbados': 'BRB', 'Bolivia': 'BOL', 'Paraguay': 'PRY',
+  'Uruguay': 'URY', 'Guyana': 'GUY', 'Suriname': 'SUR',
+};
+
+interface InteractiveWorldMapProps {
+  countries: Country[];
+  wishlist: string[];
+}
+
+const InteractiveWorldMap = ({ countries, wishlist }: InteractiveWorldMapProps) => {
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const [mapToken, setMapToken] = useState<string | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
+
+  // Get visited country ISO codes
+  const visitedCountries = countries
+    .filter(c => c.visitedBy.length > 0)
+    .map(c => countryToISO3[c.name])
+    .filter(Boolean);
+
+  const wishlistCountries = countries
+    .filter(c => wishlist.includes(c.id))
+    .map(c => countryToISO3[c.name])
+    .filter(Boolean);
+
+  useEffect(() => {
+    // Fetch token from edge function
+    const fetchToken = async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-mapbox-token`);
+        const data = await response.json();
+        if (data.token) {
+          setMapToken(data.token);
+        }
+      } catch (error) {
+        console.error('Error fetching Mapbox token:', error);
+      }
+    };
+    fetchToken();
+  }, []);
+
+  useEffect(() => {
+    if (!mapContainer.current || !mapToken) return;
+
+    mapboxgl.accessToken = mapToken;
+
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/light-v11',
+      projection: 'globe',
+      zoom: 1.5,
+      center: [30, 20],
+      pitch: 20,
+    });
+
+    map.current.addControl(
+      new mapboxgl.NavigationControl({ visualizePitch: true }),
+      'top-right'
+    );
+
+    map.current.scrollZoom.disable();
+
+    map.current.on('style.load', () => {
+      map.current?.setFog({
+        color: 'rgb(255, 255, 255)',
+        'high-color': 'rgb(200, 200, 225)',
+        'horizon-blend': 0.2,
+      });
+
+      // Add country fill layer for visited countries
+      map.current?.addSource('countries', {
+        type: 'vector',
+        url: 'mapbox://mapbox.country-boundaries-v1',
+      });
+
+      // Visited countries layer - primary color
+      map.current?.addLayer({
+        id: 'visited-countries',
+        type: 'fill',
+        source: 'countries',
+        'source-layer': 'country_boundaries',
+        paint: {
+          'fill-color': 'hsl(20, 90%, 58%)',
+          'fill-opacity': 0.6,
+        },
+        filter: ['in', 'iso_3166_1_alpha_3', ...visitedCountries],
+      });
+
+      // Wishlist countries layer - secondary color
+      map.current?.addLayer({
+        id: 'wishlist-countries',
+        type: 'fill',
+        source: 'countries',
+        'source-layer': 'country_boundaries',
+        paint: {
+          'fill-color': 'hsl(200, 85%, 55%)',
+          'fill-opacity': 0.4,
+        },
+        filter: ['in', 'iso_3166_1_alpha_3', ...wishlistCountries],
+      });
+
+      // Country borders
+      map.current?.addLayer({
+        id: 'country-borders',
+        type: 'line',
+        source: 'countries',
+        'source-layer': 'country_boundaries',
+        paint: {
+          'line-color': 'hsl(20, 14%, 50%)',
+          'line-width': 0.5,
+        },
+      });
+    });
+
+    // Slow rotation
+    const secondsPerRevolution = 300;
+    let userInteracting = false;
+
+    function spinGlobe() {
+      if (!map.current) return;
+      const zoom = map.current.getZoom();
+      if (!userInteracting && zoom < 3) {
+        const distancePerSecond = 360 / secondsPerRevolution;
+        const center = map.current.getCenter();
+        center.lng -= distancePerSecond / 60;
+        map.current.easeTo({ center, duration: 1000, easing: (n) => n });
+      }
+    }
+
+    map.current.on('mousedown', () => { userInteracting = true; });
+    map.current.on('mouseup', () => { userInteracting = false; spinGlobe(); });
+    map.current.on('touchend', () => { userInteracting = false; spinGlobe(); });
+    map.current.on('moveend', spinGlobe);
+
+    spinGlobe();
+
+    return () => {
+      map.current?.remove();
+    };
+  }, [mapToken, visitedCountries, wishlistCountries]);
+
+  if (!mapToken) {
+    return (
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-foreground">
+            <Globe className="h-5 w-5 text-primary" />
+            World Explorer
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[400px] flex items-center justify-center bg-muted rounded-lg">
+            <div className="text-center text-muted-foreground">
+              <Globe className="h-12 w-12 mx-auto mb-2 animate-pulse" />
+              <p>Loading map...</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="bg-card border-border overflow-hidden">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-foreground">
+          <Globe className="h-5 w-5 text-primary" />
+          World Explorer
+        </CardTitle>
+        <div className="flex gap-4 text-sm text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full bg-primary opacity-70" />
+            Visited ({visitedCountries.length})
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full bg-secondary opacity-70" />
+            Wishlist ({wishlistCountries.length})
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="relative">
+          <div ref={mapContainer} className="h-[450px] w-full" />
+          <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-card/20 to-transparent" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default InteractiveWorldMap;
