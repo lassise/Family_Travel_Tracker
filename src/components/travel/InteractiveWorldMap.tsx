@@ -65,6 +65,44 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
     [homeCountry]
   );
 
+  // Country center coordinates for initial map view
+  const countryCoordinates: Record<string, [number, number]> = {
+    'USA': [-98.5, 39.8], 'CAN': [-106.3, 56.1], 'MEX': [-102.5, 23.6],
+    'BRA': [-51.9, -14.2], 'ARG': [-63.6, -38.4], 'GBR': [-3.4, 55.4],
+    'FRA': [2.2, 46.2], 'DEU': [10.5, 51.2], 'ITA': [12.6, 41.9],
+    'ESP': [-3.7, 40.5], 'PRT': [-8.2, 39.4], 'NLD': [5.3, 52.1],
+    'BEL': [4.5, 50.5], 'CHE': [8.2, 46.8], 'AUT': [14.6, 47.5],
+    'POL': [19.1, 51.9], 'CZE': [15.5, 49.8], 'HUN': [19.5, 47.2],
+    'GRC': [21.8, 39.1], 'TUR': [35.2, 39.0], 'RUS': [105.3, 61.5],
+    'CHN': [104.2, 35.9], 'JPN': [138.3, 36.2], 'KOR': [127.8, 35.9],
+    'IND': [78.9, 20.6], 'AUS': [133.8, -25.3], 'NZL': [174.9, -40.9],
+    'ZAF': [22.9, -30.6], 'EGY': [30.8, 26.8], 'MAR': [-7.1, 31.8],
+    'NGA': [8.7, 9.1], 'KEN': [37.9, -0.0], 'ARE': [53.8, 23.4],
+    'SAU': [45.1, 23.9], 'ISR': [34.9, 31.0], 'THA': [100.5, 15.9],
+    'VNM': [108.3, 14.1], 'SGP': [103.8, 1.4], 'MYS': [101.7, 4.2],
+    'IDN': [113.9, -0.8], 'PHL': [121.8, 12.9], 'COL': [-74.3, 4.6],
+    'PER': [-75.0, -9.2], 'CHL': [-71.5, -35.7], 'VEN': [-66.6, 6.4],
+    'ECU': [-78.2, -1.8], 'CUB': [-77.8, 21.5], 'PAN': [-80.8, 8.5],
+    'CRI': [-84.0, 9.7], 'GTM': [-90.2, 15.8], 'HND': [-86.2, 15.2],
+    'NIC': [-85.2, 12.9], 'SLV': [-88.9, 13.8], 'JAM': [-77.3, 18.1],
+    'DOM': [-70.2, 18.7], 'TTO': [-61.2, 10.7], 'URY': [-55.8, -32.5],
+    'PRY': [-58.4, -23.4], 'BOL': [-63.6, -16.3], 'SWE': [18.6, 60.1],
+    'NOR': [8.5, 60.5], 'DNK': [9.5, 56.3], 'FIN': [25.7, 61.9],
+    'ISL': [-19.0, 65.0], 'IRL': [-8.2, 53.1], 'UKR': [31.2, 48.4],
+    'ROU': [25.0, 45.9], 'HRV': [15.2, 45.1], 'BGD': [90.4, 23.7],
+    'PAK': [69.3, 30.4], 'NPL': [84.1, 28.4], 'AFG': [67.7, 33.9],
+    'IRN': [53.7, 32.4], 'IRQ': [43.7, 33.2], 'JOR': [36.2, 30.6],
+    'DZA': [1.7, 28.0], 'BHS': [-77.4, 25.0], 'BRB': [-59.5, 13.2],
+    'BLZ': [-88.5, 17.2], 'GUY': [-58.9, 4.9], 'SUR': [-56.0, 4.0],
+  };
+
+  const initialCenter = useMemo((): [number, number] => {
+    if (homeCountryISO && countryCoordinates[homeCountryISO]) {
+      return countryCoordinates[homeCountryISO];
+    }
+    return [30, 20]; // Default center
+  }, [homeCountryISO]);
+
   useEffect(() => {
     const fetchToken = async () => {
       try {
@@ -90,8 +128,8 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/light-v11',
       projection: 'globe',
-      zoom: 1.5,
-      center: [30, 20],
+      zoom: homeCountryISO ? 3 : 1.5,
+      center: initialCenter,
       pitch: 20,
       dragRotate: true,
     });
@@ -173,7 +211,7 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
       map.current?.remove();
       map.current = null;
     };
-  }, [mapToken]);
+  }, [mapToken, initialCenter, homeCountryISO]);
 
   // Update filters when countries change (without re-creating map)
   useEffect(() => {
