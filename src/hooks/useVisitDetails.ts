@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-interface VisitDetail {
+export interface VisitDetail {
   id: string;
   country_id: string;
   visit_date: string | null;
   end_date: string | null;
-  number_of_days: number;
+  number_of_days: number | null;
   notes: string | null;
+  trip_name: string | null;
+  approximate_year: number | null;
+  approximate_month: number | null;
+  is_approximate: boolean | null;
 }
 
 interface CityVisit {

@@ -731,6 +731,80 @@ export type Database = {
           },
         ]
       }
+      travel_goals: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          deadline: string | null
+          goal_type: string
+          id: string
+          is_completed: boolean
+          target_count: number
+          title: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          deadline?: string | null
+          goal_type?: string
+          id?: string
+          is_completed?: boolean
+          target_count?: number
+          title: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          deadline?: string | null
+          goal_type?: string
+          id?: string
+          is_completed?: boolean
+          target_count?: number
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      travel_photos: {
+        Row: {
+          caption: string | null
+          country_id: string | null
+          created_at: string
+          id: string
+          photo_url: string
+          taken_at: string | null
+          user_id: string
+        }
+        Insert: {
+          caption?: string | null
+          country_id?: string | null
+          created_at?: string
+          id?: string
+          photo_url: string
+          taken_at?: string | null
+          user_id: string
+        }
+        Update: {
+          caption?: string | null
+          country_id?: string | null
+          created_at?: string
+          id?: string
+          photo_url?: string
+          taken_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "travel_photos_country_id_fkey"
+            columns: ["country_id"]
+            isOneToOne: false
+            referencedRelation: "countries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       travel_settings: {
         Row: {
           created_at: string | null
@@ -956,6 +1030,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_achievements: {
+        Row: {
+          achievement_key: string
+          earned_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          achievement_key: string
+          earned_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          achievement_key?: string
+          earned_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
