@@ -29,7 +29,12 @@ const TravelTimeline = ({ countries }: TravelTimelineProps) => {
 
   const formatVisitDate = (visit: typeof visitDetails[0]) => {
     if (visit.visit_date) {
-      return format(new Date(visit.visit_date), 'MMM dd, yyyy');
+      const startDate = format(new Date(visit.visit_date), 'MMM dd, yyyy');
+      if (visit.end_date) {
+        const endDate = format(new Date(visit.end_date), 'MMM dd, yyyy');
+        return `${startDate} – ${endDate}`;
+      }
+      return startDate;
     }
     if (visit.approximate_year) {
       const month = visit.approximate_month ? format(new Date(2000, visit.approximate_month - 1), 'MMM') : '';
