@@ -28,7 +28,7 @@ const Auth = () => {
 
   useEffect(() => {
     if (user && !authLoading) {
-      navigate("/");
+      navigate("/travel-history");
     }
   }, [user, authLoading, navigate]);
 
@@ -72,7 +72,7 @@ const Auth = () => {
       }
     } else {
       toast.success("Welcome back!");
-      navigate("/");
+      navigate("/travel-history");
     }
   };
 
