@@ -27,9 +27,9 @@ type TabKey = 'overview' | 'analytics' | 'achievements' | 'countries' | 'family'
 
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'overview', label: 'Overview', icon: Globe2 },
+  { key: 'countries', label: 'Countries', icon: Map },
   { key: 'analytics', label: 'Analytics', icon: BarChart3 },
   { key: 'achievements', label: 'Achievements', icon: Trophy },
-  { key: 'countries', label: 'Countries', icon: Map },
   { key: 'memories', label: 'Memories', icon: Camera },
   { key: 'family', label: 'Family', icon: Users },
 ];
@@ -38,7 +38,7 @@ const TravelHistory = () => {
   const { user, loading: authLoading } = useAuth();
   const { familyMembers, countries, wishlist, homeCountry, loading, refetch, totalContinents } = useFamilyData();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [activeTab, setActiveTab] = useState<TabKey>('countries');
 
   // Reset scroll to top when tab changes
   const handleTabChange = (tab: TabKey) => {
