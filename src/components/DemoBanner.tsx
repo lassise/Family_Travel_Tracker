@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DemoBannerProps {
   userEmail?: string | null;
@@ -12,6 +13,11 @@ const DemoBanner = ({ userEmail }: DemoBannerProps) => {
   
   const isDemo = userEmail === DEMO_EMAIL;
 
+  const handleCreateAccount = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth?mode=signup");
+  };
+
   if (!isDemo) return null;
 
   return (
@@ -21,7 +27,7 @@ const DemoBanner = ({ userEmail }: DemoBannerProps) => {
           <Sparkles className="h-4 w-4 flex-shrink-0" />
           <span>You're viewing sample data.</span>
           <button
-            onClick={() => navigate("/auth?mode=signup")}
+            onClick={handleCreateAccount}
             className="font-semibold underline underline-offset-2 hover:no-underline transition-all"
           >
             Create your free account
