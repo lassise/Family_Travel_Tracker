@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import TripCollaboratorsDialog from "@/components/trips/TripCollaboratorsDialog";
 
 interface ItineraryItem {
   id: string;
@@ -213,6 +214,7 @@ const TripDetail = () => {
             </div>
             
             <div className="flex gap-2">
+              <TripCollaboratorsDialog tripId={trip.id} tripTitle={trip.title} />
               <Badge variant="secondary" className="capitalize">
                 {trip.status || "planning"}
               </Badge>
