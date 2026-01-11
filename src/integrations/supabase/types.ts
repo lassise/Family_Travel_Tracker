@@ -1006,6 +1006,64 @@ export type Database = {
         }
         Relationships: []
       }
+      trip_collaborators: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          id: string
+          invited_by: string
+          invited_email: string | null
+          permission: string
+          status: string
+          trip_id: string
+          user_id: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          id?: string
+          invited_by: string
+          invited_email?: string | null
+          permission?: string
+          status?: string
+          trip_id: string
+          user_id?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          id?: string
+          invited_by?: string
+          invited_email?: string | null
+          permission?: string
+          status?: string
+          trip_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_collaborators_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_collaborators_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_emergency_info: {
         Row: {
           created_at: string
@@ -1303,6 +1361,10 @@ export type Database = {
       }
       is_group_member: {
         Args: { _group_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_trip_collaborator: {
+        Args: { _min_permission?: string; _trip_id: string; _user_id: string }
         Returns: boolean
       }
     }

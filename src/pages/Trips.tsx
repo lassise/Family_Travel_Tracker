@@ -24,10 +24,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import PendingInvitesCard from "@/components/trips/PendingInvitesCard";
 
 const Trips = () => {
   const { user, loading: authLoading } = useAuth();
-  const { trips, loading: tripsLoading, deleteTrip } = useTrips();
+  const { trips, loading: tripsLoading, deleteTrip, refetch } = useTrips();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get("status") || "all");
@@ -105,7 +106,10 @@ const Trips = () => {
           </Button>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        {/* Pending Invites */}
+        <PendingInvitesCard onAccepted={refetch} />
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
           <TabsList className="mb-6">
             <TabsTrigger value="all">All ({trips.length})</TabsTrigger>
             <TabsTrigger value="planning">
