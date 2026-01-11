@@ -2,10 +2,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Users, Globe, ArrowRight, ArrowLeft, Check, Plane, Home } from "lucide-react";
+import { Users, Globe, ArrowRight, ArrowLeft, Check, Plane, Home, Sparkles, Heart } from "lucide-react";
 import FamilyMembersStep from "./FamilyMembersStep";
 import CountriesStep from "./CountriesStep";
 import HomeCountryStep from "./HomeCountryStep";
+import WelcomeFeaturesStep from "./WelcomeFeaturesStep";
+import TravelPreferencesStep from "./TravelPreferencesStep";
+import { supabase } from "@/integrations/supabase/client";
 
 interface OnboardingWizardProps {
   onComplete: () => void;
@@ -15,11 +18,18 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   const [step, setStep] = useState(0);
   const [familyMembers, setFamilyMembers] = useState<Array<{ id: string; name: string }>>([]);
   const [homeCountry, setHomeCountry] = useState<string | null>(null);
+  const [completing, setCompleting] = useState(false);
 
   const steps = [
     {
       title: "Welcome to Family On The Fly!",
-      description: "Let's set up your travel tracker. First, add the people you travel with.",
+      description: "Your family's travel companion for tracking adventures around the world.",
+      icon: Sparkles,
+      component: <WelcomeFeaturesStep />,
+    },
+    {
+      title: "Who's Traveling?",
+      description: "Add the family members you'll be tracking travels for.",
       icon: Users,
       component: (
         <FamilyMembersStep 
@@ -29,7 +39,7 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
     },
     {
       title: "Where's Home?",
-      description: "Select your home country. It will be displayed on the map but won't count as a visited country.",
+      description: "Select your home country. It will be displayed on the map but won't count as visited.",
       icon: Home,
       component: (
         <HomeCountryStep 
@@ -38,8 +48,14 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
       ),
     },
     {
+      title: "Travel Preferences",
+      description: "Help us personalize your experience with a few quick questions.",
+      icon: Heart,
+      component: <TravelPreferencesStep />,
+    },
+    {
       title: "Countries You've Visited",
-      description: "Add the countries your family has already visited. You can add details later.",
+      description: "Add countries your family has already explored. You can add details later.",
       icon: Globe,
       component: (
         <CountriesStep 
@@ -52,11 +68,34 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   const currentStep = steps[step];
   const progress = ((step + 1) / steps.length) * 100;
 
+  const handleComplete = async () => {
+    setCompleting(true);
+    try {
+      // Mark onboarding as complete in the database
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from("profiles")
+          .update({ onboarding_completed: true })
+          .eq("id", user.id);
+      }
+      
+      // Also set localStorage as fallback
+      localStorage.setItem("onboarding_complete", "true");
+      onComplete();
+    } catch (error) {
+      console.error("Error completing onboarding:", error);
+      onComplete();
+    } finally {
+      setCompleting(false);
+    }
+  };
+
   const handleNext = () => {
     if (step < steps.length - 1) {
       setStep(step + 1);
     } else {
-      onComplete();
+      handleComplete();
     }
   };
 
@@ -67,7 +106,7 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   };
 
   const handleSkip = () => {
-    onComplete();
+    handleComplete();
   };
 
   return (
@@ -100,14 +139,14 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
           </CardHeader>
 
           <CardContent className="space-y-6">
-            <div className="min-h-[300px]">
+            <div className="min-h-[350px]">
               {currentStep.component}
             </div>
 
             <div className="flex items-center justify-between pt-4 border-t">
               <div>
                 {step > 0 && (
-                  <Button variant="ghost" onClick={handleBack}>
+                  <Button variant="ghost" onClick={handleBack} disabled={completing}>
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Back
                   </Button>
@@ -115,14 +154,14 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
               </div>
 
               <div className="flex gap-2">
-                <Button variant="outline" onClick={handleSkip}>
+                <Button variant="outline" onClick={handleSkip} disabled={completing}>
                   Skip for now
                 </Button>
-                <Button onClick={handleNext}>
+                <Button onClick={handleNext} disabled={completing}>
                   {step === steps.length - 1 ? (
                     <>
                       <Check className="w-4 h-4 mr-2" />
-                      Get Started
+                      {completing ? "Saving..." : "Get Started"}
                     </>
                   ) : (
                     <>

@@ -18,15 +18,17 @@ import {
 } from "lucide-react";
 
 const Dashboard = () => {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, needsOnboarding } = useAuth();
   const { trips, loading: tripsLoading } = useTrips();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
+    } else if (!authLoading && user && profile !== null && needsOnboarding) {
+      navigate("/onboarding");
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, profile, needsOnboarding, navigate]);
 
   if (authLoading || tripsLoading) {
     return (

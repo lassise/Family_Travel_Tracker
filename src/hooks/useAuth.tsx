@@ -7,6 +7,7 @@ interface Profile {
   email: string | null;
   full_name: string | null;
   avatar_url: string | null;
+  onboarding_completed: boolean | null;
 }
 
 interface AuthContextType {
@@ -18,6 +19,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   updateProfile: (data: Partial<Profile>) => Promise<{ error: Error | null }>;
+  needsOnboarding: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,6 +40,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!error && data) {
       setProfile(data);
     }
+    return data;
   };
 
   useEffect(() => {
@@ -74,6 +77,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Calculate if user needs onboarding
+  const needsOnboarding = Boolean(
+    user && 
+    profile && 
+    profile.onboarding_completed !== true
+  );
 
   const signUp = async (email: string, password: string, fullName?: string) => {
     const redirectUrl = `${window.location.origin}/`;
@@ -132,6 +142,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signIn,
         signOut,
         updateProfile,
+        needsOnboarding,
       }}
     >
       {children}
