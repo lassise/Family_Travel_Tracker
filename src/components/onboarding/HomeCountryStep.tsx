@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
-import { Home, Search, Check, ChevronsUpDown } from "lucide-react";
+import { Home, Check, ChevronsUpDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Command,
@@ -17,28 +17,19 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getAllCountries } from "@/lib/countriesData";
 
 interface HomeCountryStepProps {
   onHomeCountryChange: (country: string | null) => void;
 }
 
 const HomeCountryStep = ({ onHomeCountryChange }: HomeCountryStepProps) => {
-  const [countries, setCountries] = useState<{ id: string; name: string; flag: string }[]>([]);
+  // Use static country list from countries-list library instead of DB
+  const countries = getAllCountries();
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const fetchCountries = async () => {
-      const { data } = await supabase
-        .from("countries")
-        .select("id, name, flag")
-        .order("name", { ascending: true });
-      
-      if (data) {
-        setCountries(data);
-      }
-    };
-
     const fetchExistingHomeCountry = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -55,7 +46,6 @@ const HomeCountryStep = ({ onHomeCountryChange }: HomeCountryStepProps) => {
       }
     };
 
-    fetchCountries();
     fetchExistingHomeCountry();
   }, []);
 
@@ -112,7 +102,7 @@ const HomeCountryStep = ({ onHomeCountryChange }: HomeCountryStepProps) => {
                 <CommandGroup className="max-h-[300px] overflow-auto">
                   {countries.map((country) => (
                     <CommandItem
-                      key={country.id}
+                      key={country.code}
                       value={country.name}
                       onSelect={() => handleSelectCountry(country.name)}
                       className="cursor-pointer"

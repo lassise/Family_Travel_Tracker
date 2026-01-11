@@ -93,6 +93,9 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
           {countries.map((country) => {
             const summary = getCountrySummary(country.id);
             const countryCode = getCountryCode(country.name);
+            // Get the proper emoji flag from the countries-list library
+            const countryData = allCountriesData.find(c => c.name === country.name);
+            const displayFlag = countryData?.flag || country.flag;
             
             return (
               <Card 
@@ -100,17 +103,16 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
                 className="group hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/30 overflow-hidden"
               >
                 {/* Flag Banner */}
-                <div className="h-8 w-full relative overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center text-[100px] leading-none opacity-80 blur-[2px]">
-                    {country.flag}
+                <div className="h-16 w-full relative overflow-hidden bg-gradient-to-r from-muted to-muted/50">
+                  <div className="absolute inset-0 flex items-center justify-center text-6xl leading-none">
+                    {displayFlag}
                   </div>
-                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/90" />
                 </div>
                 
                 <CardHeader className="pb-3 pt-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg flex items-center gap-2">
-                      <span className="text-3xl">{country.flag}</span>
+                      <span className="text-2xl">{displayFlag}</span>
                       <span>{country.name}</span>
                     </CardTitle>
                     <CheckCircle2 className="w-5 h-5 text-accent" />
