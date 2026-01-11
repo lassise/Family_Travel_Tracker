@@ -33,7 +33,7 @@ const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
 ];
 
 const TravelHistory = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, needsOnboarding, profile } = useAuth();
   const { familyMembers, countries, wishlist, homeCountry, loading, refetch, totalContinents } = useFamilyData();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
@@ -58,8 +58,10 @@ const TravelHistory = () => {
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
+    } else if (!authLoading && user && profile !== null && needsOnboarding) {
+      navigate("/onboarding");
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, profile, needsOnboarding, navigate]);
 
   if (authLoading || loading) {
     return (

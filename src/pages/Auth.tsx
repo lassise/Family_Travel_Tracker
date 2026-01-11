@@ -38,7 +38,7 @@ const GoogleIcon = () => (
 );
 
 const Auth = () => {
-  const { user, signIn, signUp, loading: authLoading } = useAuth();
+  const { user, signIn, signUp, loading: authLoading, needsOnboarding, profile } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -54,10 +54,15 @@ const Auth = () => {
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
 
   useEffect(() => {
-    if (user && !authLoading) {
-      navigate("/travel-history");
+    if (user && !authLoading && profile !== null) {
+      // Check if user needs onboarding
+      if (needsOnboarding) {
+        navigate("/onboarding");
+      } else {
+        navigate("/travel-history");
+      }
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, profile, needsOnboarding, navigate]);
 
   const validateForm = (isSignUp: boolean) => {
     const newErrors: typeof errors = {};
@@ -190,7 +195,8 @@ const Auth = () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/travel-history`,
+        // Redirect to auth page - useEffect will check onboarding status
+        redirectTo: `${window.location.origin}/auth`,
       },
     });
     

@@ -5,22 +5,32 @@ import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import { Loader2 } from "lucide-react";
 
 const Onboarding = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, profile, needsOnboarding } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!loading && !user) {
       navigate("/auth");
+    } else if (!loading && user && profile !== null && !needsOnboarding) {
+      // Already completed onboarding, redirect to main app
+      navigate("/travel-history");
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, profile, needsOnboarding, navigate]);
 
   const handleComplete = () => {
-    // Mark onboarding as complete and go to dashboard
-    localStorage.setItem("onboarding_complete", "true");
-    navigate("/");
+    navigate("/travel-history");
   };
 
-  if (loading) {
+  if (loading || profile === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // If user doesn't need onboarding, show loading while redirecting
+  if (!needsOnboarding) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
