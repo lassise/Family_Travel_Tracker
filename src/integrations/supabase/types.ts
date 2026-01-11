@@ -1271,6 +1271,28 @@ export type Database = {
     }
     Functions: {
       cleanup_old_rate_limits: { Args: never; Returns: undefined }
+      get_public_profile: {
+        Args: { profile_user_id: string }
+        Returns: {
+          avatar_url: string
+          full_name: string
+          home_country: string
+          id: string
+        }[]
+      }
+      get_share_profile_by_token: {
+        Args: { token: string }
+        Returns: {
+          custom_headline: string
+          id: string
+          is_public: boolean
+          show_map: boolean
+          show_photos: boolean
+          show_stats: boolean
+          show_wishlist: boolean
+          user_id: string
+        }[]
+      }
       has_group_role: {
         Args: {
           _group_id: string
