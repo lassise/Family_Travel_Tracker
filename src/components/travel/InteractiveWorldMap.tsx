@@ -4,7 +4,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { Country } from '@/hooks/useFamilyData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Globe } from 'lucide-react';
-
+import { supabase } from '@/integrations/supabase/client';
 // Country to ISO 3166-1 alpha-3 mapping for Mapbox
 const countryToISO3: Record<string, string> = {
   'Afghanistan': 'AFG', 'Albania': 'ALB', 'Algeria': 'DZA', 'Argentina': 'ARG',
@@ -106,7 +106,18 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
   useEffect(() => {
     const fetchToken = async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-mapbox-token`);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          console.error('No session found for Mapbox token fetch');
+          return;
+        }
+        
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-mapbox-token`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        });
         const data = await response.json();
         if (data.token) {
           setMapToken(data.token);
