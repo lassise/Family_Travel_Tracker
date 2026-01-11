@@ -9,11 +9,13 @@ import { Progress } from '@/components/ui/progress';
 import { Country, FamilyMember } from '@/hooks/useFamilyData';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useVisitDetails } from '@/hooks/useVisitDetails';
 import { 
   Trophy, Target, Star, Globe, Map, Plane, Award, Medal, 
-  Crown, Gem, Plus, Check, Calendar, Trash2
+  Crown, Gem, Plus, Check, Calendar, Trash2, Clock, Users,
+  MapPin, Route, CalendarDays, CalendarRange, Milestone
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, differenceInDays, parseISO, getYear } from 'date-fns';
 
 interface AchievementsGoalsProps {
   countries: Country[];
@@ -39,6 +41,26 @@ interface Goal {
   deadline: string | null;
   is_completed: boolean;
 }
+
+interface GoalType {
+  value: string;
+  label: string;
+  icon: React.ElementType;
+  description: string;
+}
+
+const GOAL_TYPES: GoalType[] = [
+  { value: 'countries', label: 'Countries Visited', icon: Globe, description: 'Total unique countries visited' },
+  { value: 'continents', label: 'Continents Visited', icon: Map, description: 'Total continents explored' },
+  { value: 'days_abroad', label: 'Days Abroad', icon: CalendarDays, description: 'Total days spent traveling' },
+  { value: 'trips', label: 'Number of Trips', icon: Plane, description: 'Total trips taken' },
+  { value: 'cities', label: 'Cities Visited', icon: MapPin, description: 'Total unique cities visited' },
+  { value: 'countries_this_year', label: 'Countries This Year', icon: Calendar, description: 'New countries visited this year' },
+  { value: 'days_this_year', label: 'Days Abroad This Year', icon: Clock, description: 'Days spent traveling this year' },
+  { value: 'family_countries', label: 'Family Countries', icon: Users, description: 'Countries all family members visited together' },
+  { value: 'consecutive_years', label: 'Years Traveling', icon: CalendarRange, description: 'Years with at least one trip' },
+  { value: 'longest_trip', label: 'Longest Trip (Days)', icon: Route, description: 'Longest single trip duration' },
+];
 
 const ACHIEVEMENTS: Achievement[] = [
   // Country milestones
@@ -66,8 +88,67 @@ const AchievementsGoals = ({ countries, familyMembers, totalContinents }: Achiev
   const [isAddingGoal, setIsAddingGoal] = useState(false);
   const [newGoal, setNewGoal] = useState({ title: '', target_count: 5, goal_type: 'countries', deadline: '' });
   const { toast } = useToast();
+  const { visitDetails, cityVisits } = useVisitDetails();
 
   const visitedCountries = countries.filter(c => c.visitedBy.length > 0).length;
+
+  // Calculate all metrics
+  const calculateMetrics = () => {
+    const currentYear = new Date().getFullYear();
+    
+    // Total days abroad
+    const totalDaysAbroad = visitDetails.reduce((sum, v) => sum + (v.number_of_days || 0), 0);
+    
+    // Total trips (count of visit records)
+    const totalTrips = visitDetails.length;
+    
+    // Total cities
+    const totalCities = cityVisits.length;
+    
+    // This year's visits
+    const thisYearVisits = visitDetails.filter(v => {
+      if (v.visit_date) return getYear(parseISO(v.visit_date)) === currentYear;
+      if (v.approximate_year) return v.approximate_year === currentYear;
+      return false;
+    });
+    
+    const countriesThisYear = [...new Set(thisYearVisits.map(v => v.country_id))].length;
+    const daysThisYear = thisYearVisits.reduce((sum, v) => sum + (v.number_of_days || 0), 0);
+    
+    // Countries all family members visited (shared)
+    const familyCountries = countries.filter(c => 
+      familyMembers.length > 0 && c.visitedBy.length === familyMembers.length
+    ).length;
+    
+    // Years with travel
+    const yearsWithTravel = new Set<number>();
+    visitDetails.forEach(v => {
+      if (v.visit_date) yearsWithTravel.add(getYear(parseISO(v.visit_date)));
+      else if (v.approximate_year) yearsWithTravel.add(v.approximate_year);
+    });
+    const consecutiveYears = yearsWithTravel.size;
+    
+    // Longest trip
+    const longestTrip = Math.max(
+      ...visitDetails.map(v => v.number_of_days || 0),
+      0
+    );
+    
+    return {
+      countries: visitedCountries,
+      continents: totalContinents,
+      days_abroad: totalDaysAbroad,
+      trips: totalTrips,
+      cities: totalCities,
+      countries_this_year: countriesThisYear,
+      days_this_year: daysThisYear,
+      family_countries: familyCountries,
+      consecutive_years: consecutiveYears,
+      longest_trip: longestTrip,
+    };
+  };
+
+  const metrics = calculateMetrics();
 
   // Fetch existing data on mount
   useEffect(() => {
@@ -154,9 +235,16 @@ const AchievementsGoals = ({ countries, familyMembers, totalContinents }: Achiev
   };
 
   const getGoalProgress = (goal: Goal) => {
-    if (goal.goal_type === 'countries') return (visitedCountries / goal.target_count) * 100;
-    if (goal.goal_type === 'continents') return (totalContinents / goal.target_count) * 100;
-    return 0;
+    const current = metrics[goal.goal_type as keyof typeof metrics] || 0;
+    return (current / goal.target_count) * 100;
+  };
+
+  const getGoalCurrent = (goal: Goal): number => {
+    return metrics[goal.goal_type as keyof typeof metrics] || 0;
+  };
+
+  const getGoalTypeInfo = (goalType: string) => {
+    return GOAL_TYPES.find(t => t.value === goalType);
   };
 
   return (
@@ -215,7 +303,7 @@ const AchievementsGoals = ({ countries, familyMembers, totalContinents }: Achiev
                 Add Goal
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Set a Travel Goal</DialogTitle>
               </DialogHeader>
@@ -228,28 +316,37 @@ const AchievementsGoals = ({ countries, familyMembers, totalContinents }: Achiev
                     onChange={(e) => setNewGoal({ ...newGoal, title: e.target.value })}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Goal Type</Label>
-                    <Select value={newGoal.goal_type} onValueChange={(v) => setNewGoal({ ...newGoal, goal_type: v })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="countries">Countries</SelectItem>
-                        <SelectItem value="continents">Continents</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Target</Label>
-                    <Input 
-                      type="number" 
-                      min={1}
-                      value={newGoal.target_count}
-                      onChange={(e) => setNewGoal({ ...newGoal, target_count: parseInt(e.target.value) || 1 })}
-                    />
-                  </div>
+                <div>
+                  <Label>What do you want to track?</Label>
+                  <Select value={newGoal.goal_type} onValueChange={(v) => setNewGoal({ ...newGoal, goal_type: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GOAL_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          <div className="flex items-center gap-2">
+                            <type.icon className="h-4 w-4" />
+                            <span>{type.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {newGoal.goal_type && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Current: {metrics[newGoal.goal_type as keyof typeof metrics] || 0} • {getGoalTypeInfo(newGoal.goal_type)?.description}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label>Target</Label>
+                  <Input 
+                    type="number" 
+                    min={1}
+                    value={newGoal.target_count}
+                    onChange={(e) => setNewGoal({ ...newGoal, target_count: parseInt(e.target.value) || 1 })}
+                  />
                 </div>
                 <div>
                   <Label>Deadline (optional)</Label>
@@ -259,7 +356,7 @@ const AchievementsGoals = ({ countries, familyMembers, totalContinents }: Achiev
                     onChange={(e) => setNewGoal({ ...newGoal, deadline: e.target.value })}
                   />
                 </div>
-                <Button onClick={handleAddGoal} className="w-full">
+                <Button onClick={handleAddGoal} className="w-full" disabled={!newGoal.title}>
                   Create Goal
                 </Button>
               </div>
@@ -268,24 +365,45 @@ const AchievementsGoals = ({ countries, familyMembers, totalContinents }: Achiev
         </CardHeader>
         <CardContent>
           {goals.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">
-              No goals yet. Set your first travel goal!
-            </p>
+            <div className="text-center py-6">
+              <Milestone className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground">
+                No goals yet. Set your first travel goal!
+              </p>
+              <div className="mt-4 text-xs text-muted-foreground">
+                <p className="font-medium mb-2">Track things like:</p>
+                <div className="grid grid-cols-2 gap-1">
+                  {GOAL_TYPES.slice(0, 6).map(type => (
+                    <div key={type.value} className="flex items-center gap-1">
+                      <type.icon className="h-3 w-3" />
+                      <span>{type.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="space-y-4">
               {goals.map((goal) => {
                 const progress = Math.min(getGoalProgress(goal), 100);
-                const current = goal.goal_type === 'countries' ? visitedCountries : totalContinents;
+                const current = getGoalCurrent(goal);
+                const goalTypeInfo = getGoalTypeInfo(goal.goal_type);
+                const GoalIcon = goalTypeInfo?.icon || Target;
                 
                 return (
                   <div key={goal.id} className="bg-muted/50 rounded-lg p-4">
                     <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h4 className="font-medium text-foreground">{goal.title}</h4>
-                        <p className="text-xs text-muted-foreground">
-                          {current} / {goal.target_count} {goal.goal_type}
-                          {goal.deadline && ` • Due ${format(new Date(goal.deadline), 'MMM d, yyyy')}`}
-                        </p>
+                      <div className="flex items-start gap-2">
+                        <div className="p-1.5 bg-primary/10 rounded">
+                          <GoalIcon className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-foreground">{goal.title}</h4>
+                          <p className="text-xs text-muted-foreground">
+                            {current} / {goal.target_count} {goalTypeInfo?.label.toLowerCase() || goal.goal_type}
+                            {goal.deadline && ` • Due ${format(new Date(goal.deadline), 'MMM d, yyyy')}`}
+                          </p>
+                        </div>
                       </div>
                       <Button 
                         variant="ghost" 
