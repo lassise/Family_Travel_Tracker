@@ -51,36 +51,25 @@ const Highlights = () => {
         return;
       }
 
-      // Fetch share profile
-      const { data: shareData, error: shareError } = await supabase
-        .from("share_profiles")
-        .select("*")
-        .eq("share_token", token)
-        .single();
+      // Fetch share profile using secure function (doesn't expose share_token)
+      const { data: shareDataArr, error: shareError } = await supabase
+        .rpc('get_share_profile_by_token', { token });
 
-      if (shareError || !shareData) {
+      if (shareError || !shareDataArr || shareDataArr.length === 0) {
         setError("Profile not found or is private");
         setLoading(false);
         return;
       }
 
-      if (!shareData.is_public) {
-        setError("This profile is private");
-        setLoading(false);
-        return;
-      }
+      const shareData = shareDataArr[0];
+      setShareProfile(shareData as ShareProfile);
 
-      setShareProfile(shareData);
+      // Fetch user profile using secure function (doesn't expose email)
+      const { data: profileDataArr } = await supabase
+        .rpc('get_public_profile', { profile_user_id: shareData.user_id });
 
-      // Fetch user profile
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("full_name, home_country")
-        .eq("id", shareData.user_id)
-        .single();
-
-      if (profileData) {
-        setUserProfile(profileData);
+      if (profileDataArr && profileDataArr.length > 0) {
+        setUserProfile(profileDataArr[0] as UserProfile);
       }
 
       // Fetch countries visited by this user
