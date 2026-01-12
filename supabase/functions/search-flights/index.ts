@@ -70,22 +70,54 @@ serve(async (req) => {
 
     console.log(`Calling LiteAPI with params: ${searchParams.toString()}`);
 
-    const response = await fetch(`https://api.liteapi.travel/v3.0/flights/search?${searchParams.toString()}`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'X-Api-Key': liteApiKey,
-      },
-    });
+    let response;
+    try {
+      response = await fetch(`https://api.liteapi.travel/v3.0/flights/search?${searchParams.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-Api-Key': liteApiKey,
+        },
+      });
+    } catch (fetchError) {
+      console.error('Network error calling LiteAPI:', fetchError);
+      // Return empty flights on network error instead of 500
+      return new Response(JSON.stringify({ 
+        flights: [], 
+        message: 'Flight search service temporarily unavailable' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Check if response is ok before parsing JSON
     if (!response.ok) {
-      const errorText = await response.text();
+      let errorText = '';
+      try {
+        errorText = await response.text();
+      } catch (e) {
+        errorText = 'Unable to read error response';
+      }
       console.error('LiteAPI HTTP error:', response.status, errorText);
-      throw new Error(`Flight API returned ${response.status}: ${errorText || 'Unknown error'}`);
+      
+      // Return empty flights with message instead of throwing
+      return new Response(JSON.stringify({ 
+        flights: [], 
+        message: `No flights found. API status: ${response.status}` 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const responseText = await response.text();
+    let responseText = '';
+    try {
+      responseText = await response.text();
+    } catch (e) {
+      console.log('Could not read response text, returning empty flights');
+      return new Response(JSON.stringify({ flights: [] }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     
     // Handle empty responses
     if (!responseText || responseText.trim() === '') {
@@ -100,13 +132,23 @@ serve(async (req) => {
       data = JSON.parse(responseText);
     } catch (parseError) {
       console.error('Failed to parse LiteAPI response:', responseText.substring(0, 500));
-      throw new Error('Invalid response from flight API');
+      return new Response(JSON.stringify({ 
+        flights: [], 
+        message: 'Invalid response from flight API' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     if (data.error || data.errors) {
-      const errorMsg = data.error?.message || data.errors?.[0]?.message || 'Failed to search flights';
+      const errorMsg = data.error?.message || data.errors?.[0]?.message || 'No flights found';
       console.error('LiteAPI error response:', JSON.stringify(data));
-      throw new Error(errorMsg);
+      return new Response(JSON.stringify({ 
+        flights: [], 
+        message: errorMsg 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     console.log(`Found ${data?.data?.length || 0} flight options for user ${userId}`);

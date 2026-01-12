@@ -2,14 +2,14 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Users, Globe, ArrowRight, ArrowLeft, Check, Plane, Home, Sparkles, Heart, UserCheck, User } from "lucide-react";
+import { Users, Globe, ArrowRight, ArrowLeft, Check, Plane, Home, Sparkles, Heart, User } from "lucide-react";
 import YourNameStep from "./YourNameStep";
 import FamilyMembersStep from "./FamilyMembersStep";
 import CountriesStep from "./CountriesStep";
 import HomeCountryStep from "./HomeCountryStep";
 import WelcomeFeaturesStep from "./WelcomeFeaturesStep";
 import TravelPreferencesStep from "./TravelPreferencesStep";
-import SelectYourselfStep from "./SelectYourselfStep";
+// SelectYourselfStep removed - primary traveler is auto-linked to first member
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -22,7 +22,7 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   const [step, setStep] = useState(0);
   const [familyMembers, setFamilyMembers] = useState<Array<{ id: string; name: string }>>([]);
   const [homeCountry, setHomeCountry] = useState<string | null>(null);
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  // selectedMemberId removed - we auto-select first family member
   const [completing, setCompleting] = useState(false);
   const [isSoloTraveler, setIsSoloTraveler] = useState(false);
   const [userName, setUserName] = useState<string>("");
@@ -65,18 +65,8 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
     },
   ];
 
-  // Only show "Select Primary Traveler" step if there's more than one family member
-  const selectYourselfStep = familyMembers.length > 1 ? [{
-    title: "Who's the Primary Traveler?",
-    description: "Select the main traveler who will manage this account.",
-    icon: UserCheck,
-    component: (
-      <SelectYourselfStep 
-        familyMembers={familyMembers}
-        onSelect={setSelectedMemberId}
-      />
-    ),
-  }] : [];
+  // Auto-select the first family member as primary - no need to ask
+  // This simplifies onboarding by assuming the first traveler added is the primary user
 
   const remainingSteps = [
     {
@@ -97,7 +87,7 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
     },
   ];
 
-  const steps = [...baseSteps, ...selectYourselfStep, ...remainingSteps];
+  const steps = [...baseSteps, ...remainingSteps];
 
   const currentStep = steps[step];
   const progress = ((step + 1) / steps.length) * 100;
@@ -111,11 +101,9 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
         // Update profile with onboarding complete and linked member
         const updateData: any = { onboarding_completed: true };
         
-        // Auto-link if solo traveler with exactly one member, or use selected member
-        if (familyMembers.length === 1) {
+        // Auto-link to the first family member added (the primary traveler)
+        if (familyMembers.length >= 1) {
           updateData.linked_family_member_id = familyMembers[0].id;
-        } else if (selectedMemberId) {
-          updateData.linked_family_member_id = selectedMemberId;
         }
         
         await supabase
