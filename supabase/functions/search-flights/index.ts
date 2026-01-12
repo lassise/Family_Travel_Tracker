@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +14,37 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('Missing or invalid Authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Authentication required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Create Supabase client and verify JWT
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      console.error('Invalid authentication token:', claimsError?.message);
+      return new Response(
+        JSON.stringify({ error: 'Invalid authentication token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const userId = claimsData.claims.sub;
+    console.log('Authenticated user:', userId);
+
     const liteApiKey = Deno.env.get('LITEAPI_SANDBOX_KEY');
     if (!liteApiKey) {
       console.error('LITEAPI_SANDBOX_KEY not configured');
@@ -21,10 +53,9 @@ serve(async (req) => {
 
     const { origin, destination, departureDate, returnDate, passengers, tripType } = await req.json();
 
-    console.log(`Searching flights: ${origin} -> ${destination}, ${departureDate}${returnDate ? ` - ${returnDate}` : ''}, ${passengers} passengers`);
+    console.log(`User ${userId} searching flights: ${origin} -> ${destination}, ${departureDate}${returnDate ? ` - ${returnDate}` : ''}, ${passengers} passengers`);
 
-    // LiteAPI GraphQL query for flight search
-    // Use REST API instead of GraphQL for more reliable response handling
+    // LiteAPI REST API for flight search
     const searchParams = new URLSearchParams({
       origin,
       destination,
@@ -78,7 +109,7 @@ serve(async (req) => {
       throw new Error(errorMsg);
     }
 
-    console.log(`Found ${data?.data?.length || 0} flight options`);
+    console.log(`Found ${data?.data?.length || 0} flight options for user ${userId}`);
 
     // Transform the response to a cleaner format
     const flights = (data?.data || []).map((option: any) => ({
