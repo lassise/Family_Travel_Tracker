@@ -2,10 +2,14 @@ import { useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
+import { useFamilyData } from "@/hooks/useFamilyData";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import HeroSummaryCard from "@/components/travel/HeroSummaryCard";
+import InteractiveWorldMap from "@/components/travel/InteractiveWorldMap";
+import TravelMilestones from "@/components/travel/TravelMilestones";
 import { 
   Plus, 
   Plane, 
@@ -14,12 +18,18 @@ import {
   ArrowRight,
   Sparkles,
   Globe,
-  Loader2
+  Loader2,
+  Map,
+  Trophy,
+  BarChart3,
+  PlaneTakeoff,
+  Compass
 } from "lucide-react";
 
 const Dashboard = () => {
   const { user, profile, loading: authLoading, needsOnboarding } = useAuth();
   const { trips, loading: tripsLoading } = useTrips();
+  const { familyMembers, countries, wishlist, homeCountry, loading: familyLoading, totalContinents } = useFamilyData();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -30,7 +40,7 @@ const Dashboard = () => {
     }
   }, [user, authLoading, profile, needsOnboarding, navigate]);
 
-  if (authLoading || tripsLoading) {
+  if (authLoading || tripsLoading || familyLoading) {
     return (
       <AppLayout>
         <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
@@ -42,7 +52,7 @@ const Dashboard = () => {
 
   const upcomingTrips = trips.filter((t) => t.status === "upcoming" || t.status === "planning");
   const activeTrips = trips.filter((t) => t.status === "active");
-  const completedTrips = trips.filter((t) => t.status === "completed");
+  const visitedCountriesCount = countries.filter(c => c.visitedBy.length > 0).length;
 
   const formatDate = (date: string | null) => {
     if (!date) return "";
@@ -61,72 +71,132 @@ const Dashboard = () => {
             Welcome back, {profile?.full_name?.split(" ")[0] || "Traveler"}!
           </h1>
           <p className="text-muted-foreground">
-            Plan your next family adventure or check on your upcoming trips.
+            Track your family's adventures, plan your next trip, and explore new destinations.
           </p>
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <Card 
-            className="cursor-pointer hover:shadow-travel transition-all hover:border-primary/50 group"
-            onClick={() => navigate("/trips/new")}
-          >
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className="w-12 h-12 rounded-full bg-gradient-hero flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Sparkles className="h-6 w-6 text-primary-foreground" />
-              </div>
-              <div>
-                <h3 className="font-semibold">AI Trip Planner</h3>
-                <p className="text-sm text-muted-foreground">Generate a custom itinerary</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className="cursor-pointer hover:shadow-md transition-shadow hover:border-primary/50"
-            onClick={() => navigate("/trips/new?mode=manual")}
-          >
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center">
-                <Plus className="h-6 w-6 text-secondary" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Create Trip</h3>
-                <p className="text-sm text-muted-foreground">Start from scratch</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className="cursor-pointer hover:shadow-md transition-shadow hover:border-primary/50"
-            onClick={() => navigate("/flights")}
-          >
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-                <Plane className="h-6 w-6 text-accent" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Find Flights</h3>
-                <p className="text-sm text-muted-foreground">Search & compare options</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className="cursor-pointer hover:shadow-md transition-shadow hover:border-primary/50"
-            onClick={() => navigate("/explore")}
-          >
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Globe className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Explore Destinations</h3>
-                <p className="text-sm text-muted-foreground">Get recommendations</p>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Hero Summary - Countries Visited Overview */}
+        <div className="mb-8">
+          <HeroSummaryCard 
+            countries={countries} 
+            familyMembers={familyMembers} 
+            totalContinents={totalContinents} 
+          />
         </div>
+
+        {/* Interactive World Map */}
+        <div className="mb-8">
+          <InteractiveWorldMap 
+            countries={countries} 
+            wishlist={wishlist} 
+            homeCountry={homeCountry} 
+          />
+        </div>
+
+        {/* Travel Milestones */}
+        <div className="mb-8">
+          <TravelMilestones 
+            countries={countries} 
+            familyMembers={familyMembers} 
+            totalContinents={totalContinents} 
+          />
+        </div>
+
+        {/* Quick Actions */}
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <Card 
+              className="cursor-pointer hover:shadow-travel transition-all hover:border-primary/50 group"
+              onClick={() => navigate("/family")}
+            >
+              <CardContent className="flex flex-col items-center gap-3 p-4 text-center">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Map className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Countries</h3>
+                  <p className="text-xs text-muted-foreground">Track visits</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-travel transition-all hover:border-primary/50 group"
+              onClick={() => navigate("/family?tab=analytics")}
+            >
+              <CardContent className="flex flex-col items-center gap-3 p-4 text-center">
+                <div className="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <BarChart3 className="h-6 w-6 text-secondary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Analytics</h3>
+                  <p className="text-xs text-muted-foreground">View stats</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-travel transition-all hover:border-primary/50 group"
+              onClick={() => navigate("/family?tab=achievements")}
+            >
+              <CardContent className="flex flex-col items-center gap-3 p-4 text-center">
+                <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Trophy className="h-6 w-6 text-accent" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Achievements</h3>
+                  <p className="text-xs text-muted-foreground">Earn badges</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-md transition-shadow hover:border-primary/50 group"
+              onClick={() => navigate("/trips/new")}
+            >
+              <CardContent className="flex flex-col items-center gap-3 p-4 text-center">
+                <div className="w-12 h-12 rounded-full bg-gradient-hero flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Sparkles className="h-6 w-6 text-primary-foreground" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">AI Planner</h3>
+                  <p className="text-xs text-muted-foreground">Plan trip</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-md transition-shadow hover:border-primary/50 group"
+              onClick={() => navigate("/flights")}
+            >
+              <CardContent className="flex flex-col items-center gap-3 p-4 text-center">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <PlaneTakeoff className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Flights</h3>
+                  <p className="text-xs text-muted-foreground">Search flights</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card 
+              className="cursor-pointer hover:shadow-md transition-shadow hover:border-primary/50 group"
+              onClick={() => navigate("/explore")}
+            >
+              <CardContent className="flex flex-col items-center gap-3 p-4 text-center">
+                <div className="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Compass className="h-6 w-6 text-secondary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Explore</h3>
+                  <p className="text-xs text-muted-foreground">Destinations</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
 
         {/* Active Trip Alert */}
         {activeTrips.length > 0 && (
@@ -224,36 +294,45 @@ const Dashboard = () => {
           )}
         </section>
 
-        {/* Past Trips */}
-        {completedTrips.length > 0 && (
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Past Adventures</h2>
-              <Link to="/trips?status=completed" className="text-sm text-primary hover:underline">
-                View all
-              </Link>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {completedTrips.slice(0, 4).map((trip) => (
-                <Card 
-                  key={trip.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow opacity-80 hover:opacity-100"
-                  onClick={() => navigate(`/trips/${trip.id}`)}
-                >
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">{trip.title}</CardTitle>
-                    {trip.destination && (
-                      <CardDescription className="flex items-center gap-1 text-xs">
-                        <MapPin className="h-3 w-3" />
-                        {trip.destination}
-                      </CardDescription>
-                    )}
-                  </CardHeader>
-                </Card>
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Stats Summary */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Your Travel Stats</h2>
+            <Link to="/family?tab=analytics" className="text-sm text-primary hover:underline">
+              View detailed analytics
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-6">
+                <Globe className="h-8 w-8 text-primary mb-2" />
+                <p className="text-3xl font-bold">{visitedCountriesCount}</p>
+                <p className="text-sm text-muted-foreground">Countries Visited</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-6">
+                <Map className="h-8 w-8 text-secondary mb-2" />
+                <p className="text-3xl font-bold">{totalContinents}</p>
+                <p className="text-sm text-muted-foreground">Continents</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-6">
+                <Plane className="h-8 w-8 text-accent mb-2" />
+                <p className="text-3xl font-bold">{trips.length}</p>
+                <p className="text-sm text-muted-foreground">Total Trips</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-6">
+                <Trophy className="h-8 w-8 text-primary mb-2" />
+                <p className="text-3xl font-bold">{familyMembers.length}</p>
+                <p className="text-sm text-muted-foreground">Family Members</p>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
       </div>
     </AppLayout>
   );
