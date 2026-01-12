@@ -2,14 +2,6 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { 
@@ -25,10 +17,10 @@ import {
   Luggage,
   Globe,
   History,
-  Share2,
-  ChevronDown
+  PlaneTakeoff
 } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 
 const Header = () => {
   const { user, profile, signOut } = useAuth();
@@ -39,6 +31,7 @@ const Header = () => {
 
   const handleSignOut = async () => {
     await signOut();
+    setMobileMenuOpen(false);
     navigate("/auth");
   };
 
@@ -58,24 +51,36 @@ const Header = () => {
     { href: "/travel-history", label: "Travel History", icon: History },
   ];
 
-  // Trip planning links (moved to dropdown)
+  // Trip planning links
   const tripPlanningLinks = [
     { href: "/trips", label: "My Trips", icon: Luggage },
     { href: "/trips/new", label: "Plan New Trip", icon: Plus },
+    { href: "/flights", label: "Find Flights", icon: PlaneTakeoff },
     { href: "/explore", label: "Explore Destinations", icon: Map },
+  ];
+
+  // Profile links
+  const profileLinks = [
+    { href: "/profile", label: "Profile", icon: User },
+    { href: "/settings", label: "Settings", icon: Settings },
   ];
 
   const isActive = (path: string) => location.pathname === path;
 
+  const handleNavigate = (path: string) => {
+    navigate(path);
+    setMobileMenuOpen(false);
+  };
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-background">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <div className="w-9 h-9 rounded-full bg-gradient-hero flex items-center justify-center">
             <Plane className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="font-bold text-lg hidden sm:block bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+          <span className="font-bold text-lg text-foreground">
             Family On The Fly
           </span>
         </Link>
@@ -95,45 +100,11 @@ const Header = () => {
               {link.label}
             </Link>
           ))}
-          
-          {/* Trip Planning Dropdown */}
-          {user && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  className={`px-4 py-2 text-sm font-medium ${
-                    ['/trips', '/trips/new', '/explore'].some(p => location.pathname.startsWith(p))
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Trip Planning
-                  <ChevronDown className="ml-1 h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" className="w-48">
-                {tripPlanningLinks.map((link) => {
-                  const Icon = link.icon;
-                  return (
-                    <DropdownMenuItem 
-                      key={link.href} 
-                      onClick={() => navigate(link.href)}
-                      className="cursor-pointer"
-                    >
-                      <Icon className="mr-2 h-4 w-4" />
-                      {link.label}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
         </nav>
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {/* Search */}
+          {/* Search - Desktop only */}
           <div className="hidden sm:block relative">
             {searchOpen ? (
               <div className="flex items-center gap-2">
@@ -162,132 +133,150 @@ const Header = () => {
             )}
           </div>
 
-          {user ? (
-            <>
-              {/* User Menu */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                    <Avatar className="h-9 w-9">
+          {/* Hamburger Menu - Combined menu for all screens */}
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative">
+                {user ? (
+                  <div className="relative">
+                    <Avatar className="h-8 w-8">
                       <AvatarImage src={profile?.avatar_url || undefined} />
-                      <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                         {getInitials(profile?.full_name)}
                       </AvatarFallback>
                     </Avatar>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end">
-                  <div className="flex items-center justify-start gap-2 p-2">
-                    <div className="flex flex-col space-y-0.5 leading-none">
-                      <p className="font-medium text-sm">
-                        {profile?.full_name || "User"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {profile?.email}
-                      </p>
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-background rounded-full flex items-center justify-center">
+                      <Menu className="h-2 w-2 text-muted-foreground" />
                     </div>
                   </div>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate("/profile")}>
-                    <User className="mr-2 h-4 w-4" />
-                    Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/settings")}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-                    Trip Planning
-                  </DropdownMenuLabel>
-                  {tripPlanningLinks.map((link) => {
-                    const Icon = link.icon;
-                    return (
-                      <DropdownMenuItem 
-                        key={link.href} 
-                        onClick={() => navigate(link.href)}
-                      >
-                        <Icon className="mr-2 h-4 w-4" />
-                        {link.label}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
-          ) : (
-            <Button onClick={() => navigate("/auth")} size="sm">
-              Sign In
-            </Button>
-          )}
-
-          {/* Mobile Menu */}
-          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-            <SheetTrigger asChild className="md:hidden">
-              <Button variant="ghost" size="icon">
-                <Menu className="h-5 w-5" />
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-72">
-              <div className="flex flex-col gap-4 mt-8">
+            <SheetContent side="right" className="w-80">
+              <SheetHeader className="text-left pb-4">
+                <SheetTitle className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-gradient-hero flex items-center justify-center">
+                    <Plane className="w-4 h-4 text-primary-foreground" />
+                  </div>
+                  <span>Family On The Fly</span>
+                </SheetTitle>
+              </SheetHeader>
+
+              {user && (
+                <div className="flex items-center gap-3 py-4 border-b border-border">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={profile?.avatar_url || undefined} />
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      {getInitials(profile?.full_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium text-foreground">
+                      {profile?.full_name || "User"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {profile?.email}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1 py-4">
                 {/* Mobile Search */}
-                <div className="relative">
+                <div className="relative mb-3 sm:hidden">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input placeholder="Search..." className="pl-9" />
                 </div>
 
                 {/* Primary Nav Links */}
-                <nav className="flex flex-col gap-1">
-                  <p className="text-xs font-medium text-muted-foreground px-4 mb-1">Explore</p>
-                  {primaryLinks.map((link) => {
-                    const Icon = link.icon;
-                    return (
-                      <Link
-                        key={link.href}
-                        to={link.href}
-                        onClick={() => setMobileMenuOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                          isActive(link.href)
-                            ? "bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                        }`}
-                      >
-                        <Icon className="h-5 w-5" />
-                        {link.label}
-                      </Link>
-                    );
-                  })}
-                </nav>
+                <p className="text-xs font-medium text-muted-foreground px-3 mb-1">Explore</p>
+                {primaryLinks.map((link) => {
+                  const Icon = link.icon;
+                  return (
+                    <button
+                      key={link.href}
+                      onClick={() => handleNavigate(link.href)}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left ${
+                        isActive(link.href)
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                      {link.label}
+                    </button>
+                  );
+                })}
 
                 {user && (
                   <>
+                    <Separator className="my-3" />
+                    
                     {/* Trip Planning Links */}
-                    <nav className="flex flex-col gap-1 border-t border-border pt-4">
-                      <p className="text-xs font-medium text-muted-foreground px-4 mb-1">Trip Planning</p>
-                      {tripPlanningLinks.map((link) => {
-                        const Icon = link.icon;
-                        return (
-                          <Link
-                            key={link.href}
-                            to={link.href}
-                            onClick={() => setMobileMenuOpen(false)}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                              isActive(link.href)
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                            }`}
-                          >
-                            <Icon className="h-5 w-5" />
-                            {link.label}
-                          </Link>
-                        );
-                      })}
-                    </nav>
+                    <p className="text-xs font-medium text-muted-foreground px-3 mb-1">Trip Planning</p>
+                    {tripPlanningLinks.map((link) => {
+                      const Icon = link.icon;
+                      return (
+                        <button
+                          key={link.href}
+                          onClick={() => handleNavigate(link.href)}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left ${
+                            isActive(link.href)
+                              ? "bg-primary/10 text-primary"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                          }`}
+                        >
+                          <Icon className="h-5 w-5" />
+                          {link.label}
+                        </button>
+                      );
+                    })}
+
+                    <Separator className="my-3" />
+                    
+                    {/* Profile Links */}
+                    <p className="text-xs font-medium text-muted-foreground px-3 mb-1">Account</p>
+                    {profileLinks.map((link) => {
+                      const Icon = link.icon;
+                      return (
+                        <button
+                          key={link.href}
+                          onClick={() => handleNavigate(link.href)}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full text-left ${
+                            isActive(link.href)
+                              ? "bg-primary/10 text-primary"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                          }`}
+                        >
+                          <Icon className="h-5 w-5" />
+                          {link.label}
+                        </button>
+                      );
+                    })}
+
+                    <Separator className="my-3" />
+                    
+                    <button
+                      onClick={handleSignOut}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 w-full text-left"
+                    >
+                      <LogOut className="h-5 w-5" />
+                      Sign out
+                    </button>
+                  </>
+                )}
+
+                {!user && (
+                  <>
+                    <Separator className="my-3" />
+                    <Button 
+                      onClick={() => handleNavigate("/auth")} 
+                      className="w-full"
+                    >
+                      Sign In
+                    </Button>
                   </>
                 )}
               </div>
