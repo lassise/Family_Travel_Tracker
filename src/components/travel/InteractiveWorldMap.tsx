@@ -34,6 +34,25 @@ const countryToISO3: Record<string, string> = {
   'Dominican Republic': 'DOM', 'Puerto Rico': 'PRI', 'Trinidad and Tobago': 'TTO',
   'Bahamas': 'BHS', 'Barbados': 'BRB', 'Bolivia': 'BOL', 'Paraguay': 'PRY',
   'Uruguay': 'URY', 'Guyana': 'GUY', 'Suriname': 'SUR',
+  // Antarctica
+  'Antarctica': 'ATA',
+  // Additional countries for better coverage
+  'Luxembourg': 'LUX', 'Malta': 'MLT', 'Cyprus': 'CYP', 'Slovenia': 'SVN',
+  'Slovakia': 'SVK', 'Estonia': 'EST', 'Latvia': 'LVA', 'Lithuania': 'LTU',
+  'Bulgaria': 'BGR', 'Serbia': 'SRB', 'Montenegro': 'MNE', 'North Macedonia': 'MKD',
+  'Bosnia and Herzegovina': 'BIH', 'Kosovo': 'XKX', 'Moldova': 'MDA', 'Belarus': 'BLR',
+  'Georgia': 'GEO', 'Armenia': 'ARM', 'Azerbaijan': 'AZE', 'Kazakhstan': 'KAZ',
+  'Uzbekistan': 'UZB', 'Turkmenistan': 'TKM', 'Kyrgyzstan': 'KGZ', 'Tajikistan': 'TJK',
+  'Mongolia': 'MNG', 'Taiwan': 'TWN', 'Hong Kong': 'HKG', 'Macau': 'MAC',
+  'Sri Lanka': 'LKA', 'Myanmar': 'MMR', 'Cambodia': 'KHM', 'Laos': 'LAO',
+  'Brunei': 'BRN', 'Papua New Guinea': 'PNG', 'Fiji': 'FJI',
+  'Tunisia': 'TUN', 'Libya': 'LBY', 'Sudan': 'SDN', 'South Sudan': 'SSD',
+  'Ethiopia': 'ETH', 'Tanzania': 'TZA', 'Uganda': 'UGA', 'Rwanda': 'RWA',
+  'Ghana': 'GHA', 'Senegal': 'SEN', 'Ivory Coast': 'CIV', 'Cameroon': 'CMR',
+  'Angola': 'AGO', 'Mozambique': 'MOZ', 'Zimbabwe': 'ZWE', 'Zambia': 'ZMB',
+  'Botswana': 'BWA', 'Namibia': 'NAM', 'Madagascar': 'MDG', 'Mauritius': 'MUS',
+  'Seychelles': 'SYC', 'Lebanon': 'LBN', 'Syria': 'SYR', 'Yemen': 'YEM',
+  'Oman': 'OMN', 'Kuwait': 'KWT', 'Bahrain': 'BHR', 'Qatar': 'QAT',
 };
 
 // ISO3 to ISO2 mapping for state lookups

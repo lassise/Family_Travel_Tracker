@@ -69,18 +69,21 @@ const TravelHistory = () => {
     }
   }, [user, authLoading, profile, needsOnboarding, navigate]);
 
-  if (authLoading || loading || personalLoading) {
+  if (authLoading) {
     return (
       <AppLayout>
         <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-muted-foreground">Loading travel history...</p>
+            <p className="text-muted-foreground">Loading...</p>
           </div>
         </div>
       </AppLayout>
     );
   }
+  
+  // Separate loading state to prevent freezing on slow data fetches
+  const isDataLoading = loading || personalLoading;
 
   const visitedCountriesCount = countries.filter(c => c.visitedBy.length > 0).length;
 
@@ -196,7 +199,21 @@ const TravelHistory = () => {
 
         {/* Tab Content */}
         <div className="container mx-auto px-4 py-6">
-          {viewMode === 'family' ? (
+          {/* Show loading skeleton when data is loading */}
+          {isDataLoading ? (
+            <div className="space-y-6">
+              <div className="h-48 bg-muted/50 rounded-lg animate-pulse flex items-center justify-center">
+                <div className="text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+                  <p className="text-muted-foreground text-sm">Loading travel data...</p>
+                </div>
+              </div>
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div className="h-64 bg-muted/50 rounded-lg animate-pulse" />
+                <div className="h-64 bg-muted/50 rounded-lg animate-pulse" />
+              </div>
+            </div>
+          ) : viewMode === 'family' ? (
             <>
               {activeTab === 'overview' && (
                 <div className="space-y-6">
