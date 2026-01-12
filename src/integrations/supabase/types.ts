@@ -462,6 +462,68 @@ export type Database = {
         }
         Relationships: []
       }
+      flight_preferences: {
+        Row: {
+          avoided_airlines: string[] | null
+          class_preference: string | null
+          created_at: string
+          id: string
+          max_extra_drive_minutes: number | null
+          max_layover_hours: number | null
+          max_stops: number | null
+          min_savings_for_further_airport: number | null
+          prefer_nonstop: boolean | null
+          preferred_airlines: string[] | null
+          preferred_departure_times: string[] | null
+          seat_preference: string | null
+          updated_at: string
+          user_id: string
+          willing_to_drive_further: boolean | null
+        }
+        Insert: {
+          avoided_airlines?: string[] | null
+          class_preference?: string | null
+          created_at?: string
+          id?: string
+          max_extra_drive_minutes?: number | null
+          max_layover_hours?: number | null
+          max_stops?: number | null
+          min_savings_for_further_airport?: number | null
+          prefer_nonstop?: boolean | null
+          preferred_airlines?: string[] | null
+          preferred_departure_times?: string[] | null
+          seat_preference?: string | null
+          updated_at?: string
+          user_id: string
+          willing_to_drive_further?: boolean | null
+        }
+        Update: {
+          avoided_airlines?: string[] | null
+          class_preference?: string | null
+          created_at?: string
+          id?: string
+          max_extra_drive_minutes?: number | null
+          max_layover_hours?: number | null
+          max_stops?: number | null
+          min_savings_for_further_airport?: number | null
+          prefer_nonstop?: boolean | null
+          preferred_airlines?: string[] | null
+          preferred_departure_times?: string[] | null
+          seat_preference?: string | null
+          updated_at?: string
+          user_id?: string
+          willing_to_drive_further?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flight_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       itinerary_days: {
         Row: {
           created_at: string
@@ -674,8 +736,10 @@ export type Database = {
           created_at: string
           email: string | null
           full_name: string | null
+          home_airports: Json | null
           home_country: string | null
           id: string
+          linked_family_member_id: string | null
           onboarding_completed: boolean | null
           updated_at: string
         }
@@ -684,8 +748,10 @@ export type Database = {
           created_at?: string
           email?: string | null
           full_name?: string | null
+          home_airports?: Json | null
           home_country?: string | null
           id: string
+          linked_family_member_id?: string | null
           onboarding_completed?: boolean | null
           updated_at?: string
         }
@@ -694,12 +760,22 @@ export type Database = {
           created_at?: string
           email?: string | null
           full_name?: string | null
+          home_airports?: Json | null
           home_country?: string | null
           id?: string
+          linked_family_member_id?: string | null
           onboarding_completed?: boolean | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_linked_family_member_id_fkey"
+            columns: ["linked_family_member_id"]
+            isOneToOne: false
+            referencedRelation: "family_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       saved_places: {
         Row: {

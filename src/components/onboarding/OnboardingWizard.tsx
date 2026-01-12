@@ -2,12 +2,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Users, Globe, ArrowRight, ArrowLeft, Check, Plane, Home, Sparkles, Heart } from "lucide-react";
+import { Users, Globe, ArrowRight, ArrowLeft, Check, Plane, Home, Sparkles, Heart, UserCheck } from "lucide-react";
 import FamilyMembersStep from "./FamilyMembersStep";
 import CountriesStep from "./CountriesStep";
 import HomeCountryStep from "./HomeCountryStep";
 import WelcomeFeaturesStep from "./WelcomeFeaturesStep";
 import TravelPreferencesStep from "./TravelPreferencesStep";
+import SelectYourselfStep from "./SelectYourselfStep";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -20,6 +21,7 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   const [step, setStep] = useState(0);
   const [familyMembers, setFamilyMembers] = useState<Array<{ id: string; name: string }>>([]);
   const [homeCountry, setHomeCountry] = useState<string | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
 
   const steps = [
@@ -36,6 +38,17 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
       component: (
         <FamilyMembersStep 
           onMembersChange={setFamilyMembers}
+        />
+      ),
+    },
+    {
+      title: "Which One Is You?",
+      description: "Select yourself so we can show your personal travel stats.",
+      icon: UserCheck,
+      component: (
+        <SelectYourselfStep 
+          familyMembers={familyMembers}
+          onSelect={setSelectedMemberId}
         />
       ),
     },
@@ -76,9 +89,15 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
       // Mark onboarding as complete in the database
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // Update profile with onboarding complete and linked member
+        const updateData: any = { onboarding_completed: true };
+        if (selectedMemberId) {
+          updateData.linked_family_member_id = selectedMemberId;
+        }
+        
         await supabase
           .from("profiles")
-          .update({ onboarding_completed: true })
+          .update(updateData)
           .eq("id", user.id);
       }
       
