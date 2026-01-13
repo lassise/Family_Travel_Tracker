@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface VisitDetail {
@@ -13,6 +13,9 @@ export interface VisitDetail {
   approximate_year: number | null;
   approximate_month: number | null;
   is_approximate: boolean | null;
+  // Memory capture fields
+  highlight: string | null;
+  why_it_mattered: string | null;
 }
 
 interface CityVisit {

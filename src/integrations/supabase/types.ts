@@ -184,6 +184,7 @@ export type Database = {
           country_id: string
           created_at: string | null
           end_date: string | null
+          highlight: string | null
           id: string
           is_approximate: boolean | null
           notes: string | null
@@ -193,6 +194,7 @@ export type Database = {
           updated_at: string | null
           user_id: string | null
           visit_date: string | null
+          why_it_mattered: string | null
         }
         Insert: {
           approximate_month?: number | null
@@ -200,6 +202,7 @@ export type Database = {
           country_id: string
           created_at?: string | null
           end_date?: string | null
+          highlight?: string | null
           id?: string
           is_approximate?: boolean | null
           notes?: string | null
@@ -209,6 +212,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
           visit_date?: string | null
+          why_it_mattered?: string | null
         }
         Update: {
           approximate_month?: number | null
@@ -216,6 +220,7 @@ export type Database = {
           country_id?: string
           created_at?: string | null
           end_date?: string | null
+          highlight?: string | null
           id?: string
           is_approximate?: boolean | null
           notes?: string | null
@@ -225,6 +230,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
           visit_date?: string | null
+          why_it_mattered?: string | null
         }
         Relationships: [
           {
@@ -1075,6 +1081,7 @@ export type Database = {
           id: string
           photo_url: string
           taken_at: string | null
+          trip_id: string | null
           user_id: string
         }
         Insert: {
@@ -1084,6 +1091,7 @@ export type Database = {
           id?: string
           photo_url: string
           taken_at?: string | null
+          trip_id?: string | null
           user_id: string
         }
         Update: {
@@ -1093,6 +1101,7 @@ export type Database = {
           id?: string
           photo_url?: string
           taken_at?: string | null
+          trip_id?: string | null
           user_id?: string
         }
         Relationships: [
@@ -1101,6 +1110,13 @@ export type Database = {
             columns: ["country_id"]
             isOneToOne: false
             referencedRelation: "countries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "travel_photos_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
             referencedColumns: ["id"]
           },
         ]
