@@ -151,7 +151,7 @@ const TravelHistory = () => {
               {activeTab === 'overview' && (
                 <div className="space-y-6">
                   <HeroSummaryCard countries={countries} familyMembers={familyMembers} totalContinents={totalContinents} />
-                  <InteractiveWorldMap countries={countries} wishlist={wishlist} homeCountry={homeCountry} />
+                  <InteractiveWorldMap countries={countries} wishlist={wishlist} homeCountry={homeCountry} onRefetch={refetch} />
                   <TravelMilestones countries={countries} familyMembers={familyMembers} totalContinents={totalContinents} />
                   <div className="grid lg:grid-cols-2 gap-6">
                     <TravelDNA countries={countries} homeCountryCode={getHomeCountryCode()} />

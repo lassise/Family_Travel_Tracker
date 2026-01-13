@@ -10,6 +10,8 @@ import { useStateVisits } from '@/hooks/useStateVisits';
 import { countriesWithStates, countryNameToCode, getStatesForCountry } from '@/lib/statesData';
 import { getAllCountries, searchCountries } from '@/lib/countriesData';
 import StateMapDialog from './StateMapDialog';
+import CountryQuickActionDialog from './CountryQuickActionDialog';
+import MapColorSettings, { MapColors, defaultMapColors } from './MapColorSettings';
 
 // Country to ISO 3166-1 alpha-3 mapping for Mapbox
 const countryToISO3: Record<string, string> = {
@@ -35,9 +37,7 @@ const countryToISO3: Record<string, string> = {
   'Dominican Republic': 'DOM', 'Puerto Rico': 'PRI', 'Trinidad and Tobago': 'TTO',
   'Bahamas': 'BHS', 'Barbados': 'BRB', 'Bolivia': 'BOL', 'Paraguay': 'PRY',
   'Uruguay': 'URY', 'Guyana': 'GUY', 'Suriname': 'SUR',
-  // Antarctica
   'Antarctica': 'ATA',
-  // Additional countries for better coverage
   'Luxembourg': 'LUX', 'Malta': 'MLT', 'Cyprus': 'CYP', 'Slovenia': 'SVN',
   'Slovakia': 'SVK', 'Estonia': 'EST', 'Latvia': 'LVA', 'Lithuania': 'LTU',
   'Bulgaria': 'BGR', 'Serbia': 'SRB', 'Montenegro': 'MNE', 'North Macedonia': 'MKD',
@@ -56,6 +56,11 @@ const countryToISO3: Record<string, string> = {
   'Oman': 'OMN', 'Kuwait': 'KWT', 'Bahrain': 'BHR', 'Qatar': 'QAT',
 };
 
+// Reverse mapping: ISO3 to country name
+const iso3ToCountryName: Record<string, string> = Object.fromEntries(
+  Object.entries(countryToISO3).map(([name, iso3]) => [iso3, name])
+);
+
 // ISO3 to ISO2 mapping for state lookups
 const iso3ToIso2: Record<string, string> = {
   'USA': 'US', 'CAN': 'CA', 'AUS': 'AU', 'BRA': 'BR', 'MEX': 'MX',
@@ -67,21 +72,52 @@ const iso3ToIso2: Record<string, string> = {
 const iso2ToIso3: Record<string, string> = Object.fromEntries(
   Object.entries(iso3ToIso2).map(([iso3, iso2]) => [iso2, iso3])
 );
+
 interface InteractiveWorldMapProps {
   countries: Country[];
   wishlist: string[];
   homeCountry?: string | null;
+  onRefetch?: () => void;
 }
 
-const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWorldMapProps) => {
+// Load colors from localStorage
+const loadMapColors = (): MapColors => {
+  try {
+    const saved = localStorage.getItem('map-colors');
+    if (saved) {
+      return { ...defaultMapColors, ...JSON.parse(saved) };
+    }
+  } catch {
+    // Ignore
+  }
+  return defaultMapColors;
+};
+
+const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: InteractiveWorldMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapToken, setMapToken] = useState<string | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [stateDialogOpen, setStateDialogOpen] = useState(false);
+  const [mapColors, setMapColors] = useState<MapColors>(loadMapColors);
+  
+  // Quick action dialog state
+  const [quickActionOpen, setQuickActionOpen] = useState(false);
+  const [clickedCountryInfo, setClickedCountryInfo] = useState<{
+    iso3: string;
+    name: string;
+    flag: string;
+    continent: string;
+  } | null>(null);
   
   const { stateVisits, getStateVisitCount } = useStateVisits();
+
+  // Save colors to localStorage when they change
+  const handleColorsChange = useCallback((newColors: MapColors) => {
+    setMapColors(newColors);
+    localStorage.setItem('map-colors', JSON.stringify(newColors));
+  }, []);
 
   // Memoize country lists to prevent unnecessary recalculations
   const visitedCountries = useMemo(() => 
@@ -92,15 +128,20 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
     [countries]
   );
 
-  // Resolve home country into a canonical {name, iso2, iso3} so map + state tracking work
-  // even if the stored value is "US", "USA", or "United States".
+  // Create a map of country names to their IDs for quick lookup
+  const countryNameToId = useMemo(() => {
+    const map = new Map<string, string>();
+    countries.forEach(c => map.set(c.name, c.id));
+    return map;
+  }, [countries]);
+
+  // Resolve home country into a canonical {name, iso2, iso3}
   const resolvedHomeCountry = useMemo(() => {
     if (!homeCountry) return { name: null as string | null, iso2: null as string | null, iso3: null as string | null };
 
     const raw = homeCountry.trim();
     const upper = raw.toUpperCase();
 
-    // ISO2 code
     if (upper.length === 2) {
       const match = getAllCountries().find(c => c.code === upper);
       return {
@@ -110,7 +151,6 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
       };
     }
 
-    // ISO3 code (for the handful we support for state tracking)
     if (upper.length === 3 && iso3ToIso2[upper]) {
       const iso2 = iso3ToIso2[upper];
       const match = getAllCountries().find(c => c.code === iso2);
@@ -121,7 +161,6 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
       };
     }
 
-    // Country name / alias
     const matchBySearch = searchCountries(raw)[0];
     const canonicalName = matchBySearch?.name ?? raw;
     const iso2 = matchBySearch?.code ?? null;
@@ -194,8 +233,49 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
     if (homeCountryISO && countryCoordinates[homeCountryISO]) {
       return countryCoordinates[homeCountryISO];
     }
-    return [30, 20]; // Default center
+    return [30, 20];
   }, [homeCountryISO]);
+
+  // Handle country click from map
+  const handleCountryClick = useCallback((iso3: string) => {
+    const countryName = iso3ToCountryName[iso3];
+    if (!countryName) {
+      // Try to get name from Mapbox data via countries-list
+      const allCountries = getAllCountries();
+      const iso2 = iso3ToIso2[iso3];
+      const match = iso2 ? allCountries.find(c => c.code === iso2) : null;
+      if (!match) return;
+      
+      setClickedCountryInfo({
+        iso3,
+        name: match.name,
+        flag: match.flag,
+        continent: match.continent,
+      });
+    } else {
+      const allCountries = getAllCountries();
+      const match = allCountries.find(c => c.name === countryName);
+      
+      setClickedCountryInfo({
+        iso3,
+        name: countryName,
+        flag: match?.flag ?? '🏳️',
+        continent: match?.continent ?? 'Unknown',
+      });
+    }
+    setQuickActionOpen(true);
+  }, []);
+
+  // Check if clicked country is visited or wishlisted
+  const isClickedCountryVisited = useMemo(() => {
+    if (!clickedCountryInfo) return false;
+    return visitedCountries.includes(clickedCountryInfo.iso3);
+  }, [clickedCountryInfo, visitedCountries]);
+
+  const isClickedCountryWishlisted = useMemo(() => {
+    if (!clickedCountryInfo) return false;
+    return wishlistCountries.includes(clickedCountryInfo.iso3);
+  }, [clickedCountryInfo, wishlistCountries]);
 
   const openStateTrackingDialogForIso3 = useCallback(
     async (iso3?: string) => {
@@ -203,7 +283,6 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
       const iso2 = iso3ToIso2[iso3];
       if (!iso2 || !countriesWithStates.includes(iso2)) return;
 
-      // Prefer a country that already exists in the current in-memory list
       const canonical = getAllCountries().find((c) => c.code === iso2);
       const countryName = canonical?.name ?? resolvedHomeCountry.name;
       if (!countryName) return;
@@ -215,8 +294,6 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
         return;
       }
 
-      // If the user hasn't marked the country as visited yet, create/retrieve a country record
-      // so state visits can reference a real country_id.
       try {
         const { data: existing } = await supabase
           .from('countries')
@@ -261,6 +338,14 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
     },
     [countries, resolvedHomeCountry.name]
   );
+
+  const handleOpenStateTracking = useCallback((countryId: string, countryName: string) => {
+    const country = countries.find(c => c.id === countryId || c.name === countryName);
+    if (country) {
+      setSelectedCountry(country);
+      setStateDialogOpen(true);
+    }
+  }, [countries]);
 
   useEffect(() => {
     const fetchToken = async () => {
@@ -309,7 +394,6 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
       'top-right'
     );
 
-    // Enable scroll zoom for better interaction
     map.current.scrollZoom.enable();
     map.current.dragPan.enable();
 
@@ -332,7 +416,7 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
         source: 'countries',
         'source-layer': 'country_boundaries',
         paint: {
-          'fill-color': 'hsl(280, 70%, 50%)',
+          'fill-color': mapColors.home,
           'fill-opacity': 0.5,
         },
         filter: ['in', 'iso_3166_1_alpha_3', ''],
@@ -345,19 +429,20 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
         source: 'countries',
         'source-layer': 'country_boundaries',
         paint: {
-          'fill-color': 'hsl(142, 70%, 45%)',
+          'fill-color': mapColors.visited,
           'fill-opacity': 0.6,
         },
         filter: ['in', 'iso_3166_1_alpha_3', ''],
       });
 
+      // Wishlist countries layer
       map.current?.addLayer({
         id: 'wishlist-countries',
         type: 'fill',
         source: 'countries',
         'source-layer': 'country_boundaries',
         paint: {
-          'fill-color': 'hsl(200, 85%, 55%)',
+          'fill-color': mapColors.wishlist,
           'fill-opacity': 0.4,
         },
         filter: ['in', 'iso_3166_1_alpha_3', ''],
@@ -374,10 +459,9 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
         },
       });
 
-      // Invisible click-capture layer for countries with state/province tracking.
-      // This avoids "click misses" when border/other layers sit above the fill.
+      // Click layer for ALL countries
       map.current?.addLayer({
-        id: 'state-trackable-countries',
+        id: 'clickable-countries',
         type: 'fill',
         source: 'countries',
         'source-layer': 'country_boundaries',
@@ -385,20 +469,22 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
           'fill-color': 'rgba(0,0,0,0)',
           'fill-opacity': 0,
         },
-        filter: ['in', 'iso_3166_1_alpha_3', ...Object.keys(iso3ToIso2)],
+        filter: ['has', 'iso_3166_1_alpha_3'],
       });
 
-      map.current?.on('click', 'state-trackable-countries', (e) => {
+      map.current?.on('click', 'clickable-countries', (e) => {
         if (!e.features?.[0]) return;
         const iso3 = e.features[0].properties?.iso_3166_1_alpha_3 as string | undefined;
-        void openStateTrackingDialogForIso3(iso3);
+        if (iso3) {
+          handleCountryClick(iso3);
+        }
       });
 
-      map.current?.on('mouseenter', 'state-trackable-countries', () => {
+      map.current?.on('mouseenter', 'clickable-countries', () => {
         map.current!.getCanvas().style.cursor = 'pointer';
       });
 
-      map.current?.on('mouseleave', 'state-trackable-countries', () => {
+      map.current?.on('mouseleave', 'clickable-countries', () => {
         map.current!.getCanvas().style.cursor = '';
       });
 
@@ -409,7 +495,7 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
       map.current?.remove();
       map.current = null;
     };
-  }, [mapToken, initialCenter, homeCountryISO, countries, openStateTrackingDialogForIso3]);
+  }, [mapToken, initialCenter, homeCountryISO, handleCountryClick, mapColors]);
 
   // Update filters when countries change (without re-creating map)
   useEffect(() => {
@@ -419,6 +505,19 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
     map.current.setFilter('visited-countries', ['in', 'iso_3166_1_alpha_3', ...visitedCountries]);
     map.current.setFilter('wishlist-countries', ['in', 'iso_3166_1_alpha_3', ...wishlistCountries]);
   }, [visitedCountries, wishlistCountries, homeCountryISO, isMapReady]);
+
+  // Update colors when they change
+  useEffect(() => {
+    if (!map.current || !isMapReady) return;
+
+    try {
+      map.current.setPaintProperty('home-country', 'fill-color', mapColors.home);
+      map.current.setPaintProperty('visited-countries', 'fill-color', mapColors.visited);
+      map.current.setPaintProperty('wishlist-countries', 'fill-color', mapColors.wishlist);
+    } catch {
+      // Layer might not exist yet
+    }
+  }, [mapColors, isMapReady]);
 
   if (!mapToken) {
     return (
@@ -444,26 +543,32 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
   return (
     <Card className="bg-card border-border overflow-hidden">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <Globe className="h-5 w-5 text-primary" />
-          World Explorer
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-foreground">
+            <Globe className="h-5 w-5 text-primary" />
+            World Explorer
+          </CardTitle>
+          <MapColorSettings colors={mapColors} onColorsChange={handleColorsChange} />
+        </div>
         <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
           {homeCountry && (
             <span className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded-full opacity-70" style={{ backgroundColor: 'hsl(280, 70%, 50%)' }} />
+              <div className="w-3 h-3 rounded-full opacity-70" style={{ backgroundColor: mapColors.home }} />
               Home
             </span>
           )}
           <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full opacity-70" style={{ backgroundColor: 'hsl(142, 70%, 45%)' }} />
+            <div className="w-3 h-3 rounded-full opacity-70" style={{ backgroundColor: mapColors.visited }} />
             Visited ({visitedCountries.length})
           </span>
           <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-secondary opacity-70" />
+            <div className="w-3 h-3 rounded-full opacity-70" style={{ backgroundColor: mapColors.wishlist }} />
             Wishlist ({wishlistCountries.length})
           </span>
         </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Click any country to add or remove it
+        </p>
       </CardHeader>
       <CardContent className="p-0">
         <div className="relative">
@@ -527,6 +632,18 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
         open={stateDialogOpen}
         onOpenChange={setStateDialogOpen}
         country={selectedCountry}
+      />
+
+      <CountryQuickActionDialog
+        open={quickActionOpen}
+        onOpenChange={setQuickActionOpen}
+        countryInfo={clickedCountryInfo}
+        isVisited={isClickedCountryVisited}
+        isWishlisted={isClickedCountryWishlisted}
+        onActionComplete={() => {
+          onRefetch?.();
+        }}
+        onOpenStateTracking={handleOpenStateTracking}
       />
     </Card>
   );
