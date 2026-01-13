@@ -14,10 +14,11 @@ import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlternateAirportsSection } from "@/components/flights/AlternateAirportsSection";
+import { PriceAlertDialog } from "@/components/flights/PriceAlertDialog";
 import { 
   PlaneTakeoff, PlaneLanding, Users, Filter, Clock, DollarSign, 
   Loader2, AlertCircle, Star, Zap, Heart, Baby, ChevronDown, AlertTriangle,
-  Info, Armchair, CheckCircle2, XCircle, ExternalLink, ArrowUpDown
+  Info, Armchair, CheckCircle2, XCircle, ExternalLink, ArrowUpDown, Bell
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -57,7 +58,6 @@ const Flights = () => {
   const [returnDate, setReturnDate] = useState("");
   const [passengers, setPassengers] = useState(1);
   const [tripType, setTripType] = useState<"roundtrip" | "oneway" | "multicity">("roundtrip");
-  const [flexibleDates, setFlexibleDates] = useState(false);
 
   // Airport search
   const [originResults, setOriginResults] = useState<Airport[]>([]);
@@ -78,6 +78,9 @@ const Flights = () => {
   
   // Seat preferences - multiple selection
   const [seatPreferences, setSeatPreferences] = useState<string[]>([]);
+  
+  // Price alert dialog
+  const [priceAlertOpen, setPriceAlertOpen] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -213,6 +216,11 @@ const Flights = () => {
     return new Date(dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
+  const formatDate = (dateTime: string) => {
+    if (!dateTime) return "";
+    return new Date(dateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
   const togglePreference = (key: keyof typeof preferences, value: string, isArray: boolean = true) => {
     if (isArray) {
       const current = preferences[key] as string[];
@@ -221,6 +229,14 @@ const Flights = () => {
         : [...current, value];
       updatePreferences({ [key]: updated });
     }
+  };
+
+  // Check if an airline is avoided
+  const isAvoidedAirline = (airlineCode: string): boolean => {
+    const airline = AIRLINES.find(a => airlineCode.startsWith(a.code) || airlineCode === a.name);
+    if (!airline) return false;
+    return preferences.avoided_airlines.includes(airline.name) || 
+           preferences.avoided_airlines.includes(airline.code);
   };
 
   if (authLoading || prefsLoading) {
@@ -256,10 +272,6 @@ const Flights = () => {
                   {type === "roundtrip" ? "Round Trip" : "One Way"}
                 </Button>
               ))}
-              <div className="flex items-center gap-2 ml-auto">
-                <Switch checked={flexibleDates} onCheckedChange={setFlexibleDates} id="flexible" />
-                <Label htmlFor="flexible" className="text-sm">±3 days</Label>
-              </div>
             </div>
 
             {/* Home Airports Quick Select */}
@@ -506,6 +518,15 @@ const Flights = () => {
                 {isDemo && <Badge variant="secondary" className="ml-2">Sample Data</Badge>}
               </h2>
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPriceAlertOpen(true)}
+                  className="gap-1"
+                >
+                  <Bell className="h-4 w-4" />
+                  Set Price Alert
+                </Button>
                 <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
                 <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
                   <SelectTrigger className="w-[160px]">
@@ -551,148 +572,171 @@ const Flights = () => {
                 default:
                   return b.score - a.score;
               }
-            }).map((flight, idx) => (
-              <Card key={flight.id} className={`${idx === 0 && sortBy === "score" ? "border-primary" : ""} ${flight.isAlternateOrigin ? "border-l-4 border-l-orange-500" : ""}`}>
-                <CardContent className="p-4">
-                  {/* Alternate Airport Badge */}
-                  {flight.isAlternateOrigin && flight.departureAirport && (
-                    <div className="flex flex-wrap items-center gap-2 mb-2 p-2 bg-orange-50 dark:bg-orange-950/30 rounded-md">
-                      <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
-                        From {flight.departureAirport}
-                      </Badge>
-                      {flight.savingsFromPrimary && flight.savingsFromPrimary > 0 && (
-                        <div className="flex flex-wrap gap-2 text-sm text-orange-700 dark:text-orange-400 font-medium">
-                          <span>Save ${flight.savingsFromPrimary.toFixed(0)} total</span>
-                          {passengers > 1 && flight.savingsPerTicket && (
-                            <span className="text-orange-600 dark:text-orange-300">
-                              (${flight.savingsPerTicket.toFixed(0)}/ticket)
-                            </span>
+            }).map((flight, idx) => {
+              const firstSegment = flight.itineraries[0]?.segments[0];
+              const flightAirline = firstSegment?.airline || "";
+              const isAvoided = isAvoidedAirline(flightAirline);
+              
+              return (
+                <Card 
+                  key={flight.id} 
+                  className={`
+                    ${idx === 0 && sortBy === "score" && !isAvoided ? "border-primary" : ""} 
+                    ${flight.isAlternateOrigin ? "border-l-4 border-l-orange-500" : ""} 
+                    ${isAvoided ? "border-red-500 border-2 bg-red-50/30 dark:bg-red-950/10" : ""}
+                  `}
+                >
+                  <CardContent className="p-4">
+                    {/* Avoided Airline Warning */}
+                    {isAvoided && (
+                      <div className="flex items-center gap-2 mb-2 p-2 bg-red-100 dark:bg-red-950/40 rounded-md text-red-700 dark:text-red-400">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span className="text-sm font-medium">Avoided Airline</span>
+                      </div>
+                    )}
+
+                    {/* Alternate Airport Badge */}
+                    {flight.isAlternateOrigin && flight.departureAirport && (
+                      <div className="flex flex-wrap items-center gap-2 mb-2 p-2 bg-orange-50 dark:bg-orange-950/30 rounded-md">
+                        <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
+                          From {flight.departureAirport}
+                        </Badge>
+                        {flight.savingsFromPrimary && flight.savingsFromPrimary > 0 && (
+                          <div className="flex flex-wrap gap-2 text-sm text-orange-700 dark:text-orange-400 font-medium">
+                            <span>Save ${flight.savingsFromPrimary.toFixed(0)} total</span>
+                            {passengers > 1 && flight.savingsPerTicket && (
+                              <span className="text-orange-600 dark:text-orange-300">
+                                (${flight.savingsPerTicket.toFixed(0)}/ticket)
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Score and badges */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`px-2 py-1 rounded text-sm font-bold ${isAvoided ? 'bg-red-500 text-white' : 'bg-primary text-primary-foreground'}`}>
+                          {flight.score}
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {flight.badges.map(b => (
+                            <Badge key={b} variant="secondary" className="text-xs">{b}</Badge>
+                          ))}
+                          {flight.delayRisk === "high" && (
+                            <Badge variant="destructive" className="text-xs">
+                              <AlertTriangle className="h-3 w-3 mr-1" />High delay risk
+                            </Badge>
                           )}
                         </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Score and badges */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="bg-primary text-primary-foreground px-2 py-1 rounded text-sm font-bold">
-                        {flight.score}
                       </div>
-                      <div className="flex flex-wrap gap-1">
-                        {flight.badges.map(b => (
-                          <Badge key={b} variant="secondary" className="text-xs">{b}</Badge>
-                        ))}
-                        {flight.delayRisk === "high" && (
-                          <Badge variant="destructive" className="text-xs">
-                            <AlertTriangle className="h-3 w-3 mr-1" />High delay risk
-                          </Badge>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-primary">${flight.price?.toFixed(0)}</p>
+                        {passengers > 1 && flight.pricePerTicket && (
+                          <p className="text-sm text-muted-foreground">
+                            ${flight.pricePerTicket.toFixed(0)}/ticket
+                          </p>
+                        )}
+                        {flight.hiddenCosts.length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            +${flight.hiddenCosts.reduce((s, c) => s + c.estimatedCost, 0)} est. fees
+                          </p>
                         )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-primary">${flight.price?.toFixed(0)}</p>
-                      {passengers > 1 && flight.pricePerTicket && (
-                        <p className="text-sm text-muted-foreground">
-                          ${flight.pricePerTicket.toFixed(0)}/ticket
-                        </p>
-                      )}
-                      {flight.hiddenCosts.length > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          +${flight.hiddenCosts.reduce((s, c) => s + c.estimatedCost, 0)} est. fees
-                        </p>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Explanation */}
-                  <p className="text-sm text-muted-foreground mb-3 italic">{flight.explanation}</p>
+                    {/* Explanation */}
+                    <p className="text-sm text-muted-foreground mb-3 italic">{flight.explanation}</p>
 
-                  {/* Preference Matches - Positives and Negatives */}
-                  {flight.preferenceMatches && flight.preferenceMatches.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {flight.preferenceMatches.filter(m => m.type === "positive").map((match, i) => (
-                        <Tooltip key={`pos-${i}`}>
-                          <TooltipTrigger asChild>
-                            <Badge variant="outline" className="text-xs border-green-500/50 bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 cursor-help">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              {match.label}
-                            </Badge>
-                          </TooltipTrigger>
-                          {match.detail && (
-                            <TooltipContent>
-                              <p>{match.detail}</p>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      ))}
-                      {flight.preferenceMatches.filter(m => m.type === "negative").map((match, i) => (
-                        <Tooltip key={`neg-${i}`}>
-                          <TooltipTrigger asChild>
-                            <Badge variant="outline" className="text-xs border-red-500/50 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 cursor-help">
-                              <XCircle className="h-3 w-3 mr-1" />
-                              {match.label}
-                            </Badge>
-                          </TooltipTrigger>
-                          {match.detail && (
-                            <TooltipContent>
-                              <p>{match.detail}</p>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      ))}
-                    </div>
-                  )}
+                    {/* Preference Matches - Positives and Negatives */}
+                    {flight.preferenceMatches && flight.preferenceMatches.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {flight.preferenceMatches.filter(m => m.type === "positive").map((match, i) => (
+                          <Tooltip key={`pos-${i}`}>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className="text-xs border-green-500/50 bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 cursor-help">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                {match.label}
+                              </Badge>
+                            </TooltipTrigger>
+                            {match.detail && (
+                              <TooltipContent>
+                                <p>{match.detail}</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        ))}
+                        {flight.preferenceMatches.filter(m => m.type === "negative").map((match, i) => (
+                          <Tooltip key={`neg-${i}`}>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className="text-xs border-red-500/50 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 cursor-help">
+                                <XCircle className="h-3 w-3 mr-1" />
+                                {match.label}
+                              </Badge>
+                            </TooltipTrigger>
+                            {match.detail && (
+                              <TooltipContent>
+                                <p>{match.detail}</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        ))}
+                      </div>
+                    )}
 
-                  {/* Flight segments */}
-                  {flight.itineraries?.map((itinerary, itIdx) => (
-                    <div key={itIdx} className="space-y-2 mb-2">
-                      {itIdx > 0 && <div className="text-xs text-muted-foreground border-t pt-2">Return</div>}
-                      {itinerary.segments?.map((seg, segIdx) => (
-                        <div key={segIdx} className="flex items-center justify-between text-sm">
-                          <Badge variant="outline">{seg.airline} {seg.flightNumber}</Badge>
-                          <div className="flex items-center gap-2 text-center">
-                            <div>
-                              <p className="font-medium">{formatTime(seg.departureTime)}</p>
-                              <p className="text-xs text-muted-foreground">{seg.departureAirport}</p>
+                    {/* Flight segments */}
+                    {flight.itineraries?.map((itinerary, itIdx) => (
+                      <div key={itIdx} className="space-y-2 mb-2">
+                        {itIdx > 0 && <div className="text-xs text-muted-foreground border-t pt-2">Return</div>}
+                        {itinerary.segments?.map((seg, segIdx) => (
+                          <div key={segIdx} className="flex items-center justify-between text-sm">
+                            <Badge variant={isAvoided ? "destructive" : "outline"}>{seg.airline} {seg.flightNumber}</Badge>
+                            <div className="flex items-center gap-2 text-center">
+                              <div>
+                                <p className="font-medium">{formatTime(seg.departureTime)}</p>
+                                <p className="text-xs text-muted-foreground">{formatDate(seg.departureTime)}</p>
+                                <p className="text-xs text-muted-foreground">{seg.departureAirport}</p>
+                              </div>
+                              <div className="px-2">
+                                <p className="text-xs text-muted-foreground">{seg.duration || '—'}</p>
+                                <div className="w-16 h-px bg-border" />
+                                <p className="text-xs">{seg.stops === 0 ? 'Nonstop' : `${seg.stops} stop`}</p>
+                              </div>
+                              <div>
+                                <p className="font-medium">{formatTime(seg.arrivalTime)}</p>
+                                <p className="text-xs text-muted-foreground">{formatDate(seg.arrivalTime)}</p>
+                                <p className="text-xs text-muted-foreground">{seg.arrivalAirport}</p>
+                              </div>
                             </div>
-                            <div className="px-2">
-                              <p className="text-xs text-muted-foreground">{seg.duration || '—'}</p>
-                              <div className="w-16 h-px bg-border" />
-                              <p className="text-xs">{seg.stops === 0 ? 'Nonstop' : `${seg.stops} stop`}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium">{formatTime(seg.arrivalTime)}</p>
-                              <p className="text-xs text-muted-foreground">{seg.arrivalAirport}</p>
-                            </div>
+                            {flight.bookingUrl ? (
+                              <Button 
+                                size="sm" 
+                                onClick={() => window.open(flight.bookingUrl, '_blank')}
+                                className="gap-1"
+                              >
+                                Book <ExternalLink className="h-3 w-3" />
+                              </Button>
+                            ) : (
+                              <Button 
+                                size="sm" 
+                                onClick={() => {
+                                  const searchUrl = `https://www.google.com/travel/flights?q=Flights%20to%20${seg.arrivalAirport}%20from%20${seg.departureAirport}%20on%20${seg.departureTime ? new Date(seg.departureTime).toISOString().split('T')[0] : ''}`;
+                                  window.open(searchUrl, '_blank');
+                                }}
+                                className="gap-1"
+                              >
+                                Book <ExternalLink className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
-                          {flight.bookingUrl ? (
-                            <Button 
-                              size="sm" 
-                              onClick={() => window.open(flight.bookingUrl, '_blank')}
-                              className="gap-1"
-                            >
-                              Book <ExternalLink className="h-3 w-3" />
-                            </Button>
-                          ) : (
-                            <Button 
-                              size="sm" 
-                              onClick={() => {
-                                const searchUrl = `https://www.google.com/travel/flights?q=flights%20${seg.departureAirport}%20to%20${seg.arrivalAirport}`;
-                                window.open(searchUrl, '_blank');
-                              }}
-                              className="gap-1"
-                            >
-                              Book <ExternalLink className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            ))}
+                        ))}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
 
@@ -815,16 +859,22 @@ const Flights = () => {
                   alternateAirports={preferences.alternate_airports}
                   onUpdate={(airports) => updatePreferences({ alternate_airports: airports })}
                 />
-                
-                {/* Search button at bottom of preferences */}
-                <Button className="w-full" size="lg" onClick={searchFlights} disabled={searching}>
-                  {searching ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlaneTakeoff className="h-4 w-4 mr-2" />}
-                  {searching ? "Searching..." : "Search with These Preferences"}
-                </Button>
               </CardContent>
             </CollapsibleContent>
           </Card>
         </Collapsible>
+
+        {/* Price Alert Dialog */}
+        <PriceAlertDialog
+          open={priceAlertOpen}
+          onOpenChange={setPriceAlertOpen}
+          origin={origin}
+          destination={destination}
+          departureDate={departDate}
+          returnDate={tripType === "roundtrip" ? returnDate : undefined}
+          currentPrice={flights[0]?.price || 0}
+          passengers={passengers}
+        />
       </div>
     </AppLayout>
   );

@@ -538,6 +538,7 @@ export const scoreFlights = (
 
     // Budget airline warnings (extra fees)
     if (["NK", "F9"].includes(firstSegment?.airline || "")) {
+      preferenceMatches.push({ type: "negative", label: "Carry-on fee", detail: "Carry-on bags cost extra" });
       if (!preferences.carry_on_only) {
         preferenceMatches.push({ type: "negative", label: "Bag fees extra", detail: "Ultra low-cost carrier" });
       }
@@ -552,11 +553,24 @@ export const scoreFlights = (
       }
     }
 
-    // Build booking URL (Google Flights redirect)
+    // Build booking URL (Google Flights redirect) with proper date formatting
     const departureAirport = firstSegment?.departureAirport || "";
     const arrivalAirport = lastSegment?.arrivalAirport || "";
-    const bookingUrl = departureAirport && arrivalAirport
-      ? `https://www.google.com/travel/flights?q=flights%20${departureAirport}%20to%20${arrivalAirport}`
+    const departureDate = firstSegment?.departureTime ? new Date(firstSegment.departureTime).toISOString().split('T')[0] : "";
+    const returnSegment = flight.itineraries[1]?.segments[0];
+    const returnDateStr = returnSegment?.departureTime ? new Date(returnSegment.departureTime).toISOString().split('T')[0] : "";
+    
+    let bookingUrl: string | undefined;
+    if (departureAirport && arrivalAirport && departureDate) {
+      const dateParams = returnDateStr 
+        ? `&tfs=CBwQAhopEgoyMDI1LTAxLTEwagwIAxIIL20vMHBseTByDAgDEggvbS8wZG1tchoKMjAyNS0wMS0xNWoMCAMSCC9tLzBkbW1yDAoDEggvbS8wcGx5MAYIAY&d=${departureDate}&r=${returnDateStr}`
+        : `&tfs=CBwQAhopEgoyMDI1LTAxLTEwagwIAxIIL20vMHBseTByDAgDEggvbS8wZG1tchoKMjAyNS0wMS0xNWoMCAMSCC9tLzBkbW1yDAoDEggvbS8wcGx5MAYIAQ&d=${departureDate}`;
+      bookingUrl = `https://www.google.com/travel/flights/search?tfs=CBwQAhoXEgoyMDI1LTAyLTAxGgNQQkkqA0FUTHABggELCP___________wFAAUgBmAEB&curr=USD&hl=en&gl=us&tfu=EgoIABAAGAAgASgC&f=${departureAirport}-${arrivalAirport}.${departureDate}`;
+    }
+    
+    // Simpler URL that works better
+    bookingUrl = departureAirport && arrivalAirport && departureDate
+      ? `https://www.google.com/travel/flights?q=Flights%20to%20${arrivalAirport}%20from%20${departureAirport}%20on%20${departureDate}${returnDateStr ? `%20returning%20${returnDateStr}` : ''}`
       : undefined;
 
     // Calculate per-ticket pricing
