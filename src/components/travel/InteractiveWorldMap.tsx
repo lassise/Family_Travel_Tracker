@@ -325,7 +325,7 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
         url: 'mapbox://mapbox.country-boundaries-v1',
       });
 
-      // Home country layer - purple/violet
+      // Home country layer
       map.current?.addLayer({
         id: 'home-country',
         type: 'fill',
@@ -338,7 +338,7 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
         filter: ['in', 'iso_3166_1_alpha_3', ''],
       });
 
-      // Visited countries layer - green
+      // Visited countries layer
       map.current?.addLayer({
         id: 'visited-countries',
         type: 'fill',
@@ -374,47 +374,31 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry }: InteractiveWo
         },
       });
 
-      // Add click handler for countries with state tracking (visited countries)
-      map.current?.on('click', 'visited-countries', (e) => {
+      // Invisible click-capture layer for countries with state/province tracking.
+      // This avoids "click misses" when border/other layers sit above the fill.
+      map.current?.addLayer({
+        id: 'state-trackable-countries',
+        type: 'fill',
+        source: 'countries',
+        'source-layer': 'country_boundaries',
+        paint: {
+          'fill-color': 'rgba(0,0,0,0)',
+          'fill-opacity': 0,
+        },
+        filter: ['in', 'iso_3166_1_alpha_3', ...Object.keys(iso3ToIso2)],
+      });
+
+      map.current?.on('click', 'state-trackable-countries', (e) => {
         if (!e.features?.[0]) return;
         const iso3 = e.features[0].properties?.iso_3166_1_alpha_3 as string | undefined;
         void openStateTrackingDialogForIso3(iso3);
       });
 
-      // Add click handler for home country (separate layer)
-      map.current?.on('click', 'home-country', (e) => {
-        if (!e.features?.[0]) return;
-        const iso3 = e.features[0].properties?.iso_3166_1_alpha_3 as string | undefined;
-        void openStateTrackingDialogForIso3(iso3);
+      map.current?.on('mouseenter', 'state-trackable-countries', () => {
+        map.current!.getCanvas().style.cursor = 'pointer';
       });
 
-      // Change cursor on hover for home country (if it has state tracking)
-      map.current?.on('mouseenter', 'home-country', (e) => {
-        if (!e.features?.[0]) return;
-        const iso3 = e.features[0].properties?.iso_3166_1_alpha_3;
-        const iso2 = iso3ToIso2[iso3];
-        
-        if (iso2 && countriesWithStates.includes(iso2)) {
-          map.current!.getCanvas().style.cursor = 'pointer';
-        }
-      });
-
-      map.current?.on('mouseleave', 'home-country', () => {
-        map.current!.getCanvas().style.cursor = '';
-      });
-
-      // Change cursor on hover for clickable countries
-      map.current?.on('mouseenter', 'visited-countries', (e) => {
-        if (!e.features?.[0]) return;
-        const iso3 = e.features[0].properties?.iso_3166_1_alpha_3;
-        const iso2 = iso3ToIso2[iso3];
-        
-        if (iso2 && countriesWithStates.includes(iso2)) {
-          map.current!.getCanvas().style.cursor = 'pointer';
-        }
-      });
-
-      map.current?.on('mouseleave', 'visited-countries', () => {
+      map.current?.on('mouseleave', 'state-trackable-countries', () => {
         map.current!.getCanvas().style.cursor = '';
       });
 
