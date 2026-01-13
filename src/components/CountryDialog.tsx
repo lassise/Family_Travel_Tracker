@@ -11,10 +11,11 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getAllCountries, type CountryOption } from "@/lib/countriesData";
 import { cn } from "@/lib/utils";
+import CountryFlag from "./common/CountryFlag";
 
 const countrySchema = z.object({
   name: z.string().trim().min(1, "Country name is required").max(100, "Name must be less than 100 characters"),
-  flag: z.string().trim().min(1, "Flag emoji is required").max(10, "Flag must be an emoji"),
+  code: z.string().trim().min(2, "Country code is required").max(2, "Code must be 2 characters"),
   continent: z.string().min(1, "Continent is required"),
 });
 
@@ -63,7 +64,7 @@ const CountryDialog = ({ country, familyMembers = [], onSuccess }: CountryDialog
     try {
       const validated = countrySchema.parse({ 
         name: selectedCountry.name, 
-        flag: selectedCountry.flag, 
+        code: selectedCountry.code.toUpperCase(), 
         continent: selectedCountry.continent 
       });
 
@@ -72,7 +73,7 @@ const CountryDialog = ({ country, familyMembers = [], onSuccess }: CountryDialog
           .from("countries")
           .update({
             name: validated.name,
-            flag: validated.flag,
+            flag: validated.code, // Store ISO2 code in flag field
             continent: validated.continent
           })
           .eq("id", country.id);
@@ -90,7 +91,7 @@ const CountryDialog = ({ country, familyMembers = [], onSuccess }: CountryDialog
           .from("countries")
           .insert([{
             name: validated.name,
-            flag: validated.flag,
+            flag: validated.code, // Store ISO2 code in flag field
             continent: validated.continent,
             user_id: user.id
           }])
@@ -175,7 +176,7 @@ const CountryDialog = ({ country, familyMembers = [], onSuccess }: CountryDialog
                 >
                   {selectedCountry ? (
                     <span className="flex items-center gap-2">
-                      <span>{selectedCountry.flag}</span>
+                      <CountryFlag countryCode={selectedCountry.code} countryName={selectedCountry.name} size="sm" />
                       <span>{selectedCountry.name}</span>
                       <span className="text-muted-foreground text-xs">({selectedCountry.continent})</span>
                     </span>
@@ -203,7 +204,7 @@ const CountryDialog = ({ country, familyMembers = [], onSuccess }: CountryDialog
                               selectedCountry?.name === countryOption.name ? "opacity-100" : "opacity-0"
                             )}
                           />
-                          <span className="mr-2">{countryOption.flag}</span>
+                          <CountryFlag countryCode={countryOption.code} countryName={countryOption.name} size="sm" className="mr-2" />
                           <span>{countryOption.name}</span>
                           <span className="ml-auto text-muted-foreground text-xs">{countryOption.continent}</span>
                         </CommandItem>
