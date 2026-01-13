@@ -11,8 +11,8 @@ import CountryVisitDetailsDialog from "./CountryVisitDetailsDialog";
 import { Country } from "@/hooks/useFamilyData";
 import { useVisitDetails } from "@/hooks/useVisitDetails";
 import { getAllCountries } from "@/lib/countriesData";
-import { getEmojiFlag, type TCountryCode } from 'countries-list';
 import { cn } from "@/lib/utils";
+import CountryFlag from "./common/CountryFlag";
 
 interface CountryTrackerProps {
   countries: Country[];
@@ -108,17 +108,21 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
           {countries.map((country) => {
             const summary = getCountrySummary(country.id);
 
-            // Some older records have the ISO2 code prefixed into the name (e.g. "AT Austria")
-            // and/or store the ISO2 code in `flag` instead of an emoji.
+            // Parse country name in case it has ISO2 prefix (legacy data: "AT Austria")
             const parsed = (country.name || "").match(/^([A-Z]{2})\s+(.+)$/);
             const codeFromName = parsed?.[1] || "";
             const displayName = parsed?.[2] || country.name;
 
-            const countryCode = (codeFromName || getCountryCode(displayName) || getCountryCode(country.name) || "").toUpperCase();
-            const flagFromCode = countryCode ? getEmojiFlag(countryCode as TCountryCode) : "";
-
-            const storedFlag = (country.flag || "").trim();
-            const displayFlag = /^[A-Z]{2}$/.test(storedFlag) ? (flagFromCode || storedFlag) : (storedFlag || flagFromCode);
+            // Derive ISO2 code: check stored flag if it's a code, then name prefix, then lookup
+            const storedFlag = (country.flag || "").trim().toUpperCase();
+            const isStoredFlagACode = /^[A-Z]{2}$/.test(storedFlag);
+            const countryCode = (
+              (isStoredFlagACode ? storedFlag : "") || 
+              codeFromName || 
+              getCountryCode(displayName) || 
+              getCountryCode(country.name) || 
+              ""
+            ).toUpperCase();
 
             const isExpanded = expandedCountries.has(country.id);
 
@@ -132,10 +136,11 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
                   <CollapsibleTrigger asChild>
                     <button className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors text-left">
                       <div className="flex items-center gap-3">
-                        <span className="text-4xl leading-none">{displayFlag}</span>
+                        <CountryFlag countryCode={countryCode} countryName={displayName} size="xl" />
                         <div>
                           <h3 className="font-semibold text-foreground flex items-center gap-2">
-                            <span className="text-xl">{displayFlag}</span> {displayName}
+                            <CountryFlag countryCode={countryCode} countryName={displayName} size="sm" />
+                            {displayName}
                           </h3>
                           <div className="flex items-center gap-2 mt-1">
                             <Badge variant="outline" className="text-xs">

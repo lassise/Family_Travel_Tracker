@@ -5,7 +5,6 @@ import { MapPin, Heart, X, Loader2, Check, Map, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { countriesWithStates, countryNameToCode } from '@/lib/statesData';
-import { getEmojiFlag, type TCountryCode } from 'countries-list';
 
 interface CountryInfo {
   iso3: string;
@@ -42,6 +41,11 @@ const CountryQuickActionDialog = ({
   const hasStateTracking = countryNameToCode[countryInfo.name] && 
     countriesWithStates.includes(countryNameToCode[countryInfo.name]);
 
+  // Get ISO2 country code from name
+  const getCountryCode = (): string => {
+    return countryNameToCode[countryInfo.name] || countryInfo.iso3?.slice(0, 2) || '';
+  };
+
   // Helper to ensure country exists and get its ID
   const ensureCountryExists = async (userId: string): Promise<string> => {
     const { data: existingCountry } = await supabase
@@ -55,18 +59,14 @@ const CountryQuickActionDialog = ({
       return existingCountry.id;
     }
 
-    // The map payload can sometimes provide a 2-letter code instead of an emoji.
-    // Normalize to an emoji flag before inserting.
-    const code = getCountryCode().toUpperCase();
-    const normalizedFlag = /^[A-Z]{2}$/.test((countryInfo.flag || '').trim())
-      ? (code ? getEmojiFlag(code as TCountryCode) : countryInfo.flag)
-      : countryInfo.flag;
+    // Store the ISO2 code in the flag field for reliable flag rendering
+    const iso2Code = getCountryCode().toUpperCase();
 
     const { data: newCountry, error: insertError } = await supabase
       .from('countries')
       .insert({
         name: countryInfo.name,
-        flag: normalizedFlag,
+        flag: iso2Code || countryInfo.flag, // Store ISO2 code, fallback to whatever was provided
         continent: countryInfo.continent,
         user_id: userId,
       })
@@ -75,11 +75,6 @@ const CountryQuickActionDialog = ({
 
     if (insertError) throw insertError;
     return newCountry.id;
-  };
-
-  // Get country code from name for the details dialog
-  const getCountryCode = (): string => {
-    return countryNameToCode[countryInfo.name] || countryInfo.iso3?.slice(0, 2) || '';
   };
 
   const handleAddVisitedQuick = async () => {
