@@ -812,6 +812,7 @@ export type Database = {
       }
       saved_flights: {
         Row: {
+          alert_email: string | null
           cabin_class: string | null
           created_at: string
           destination: string
@@ -829,6 +830,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          alert_email?: string | null
           cabin_class?: string | null
           created_at?: string
           destination: string
@@ -846,6 +848,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          alert_email?: string | null
           cabin_class?: string | null
           created_at?: string
           destination?: string
