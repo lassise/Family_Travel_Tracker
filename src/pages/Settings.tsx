@@ -5,12 +5,12 @@ import AppLayout from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Settings as SettingsIcon, Globe, Search, Check } from "lucide-react";
 import { countries as countriesList } from "countries-list";
+import DataExportSection from "@/components/settings/DataExportSection";
 
 interface Country {
   code: string;
@@ -100,55 +100,60 @@ const Settings = () => {
           <h1 className="text-3xl font-bold text-foreground">Settings</h1>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5 text-primary" />
-              Home Country
-            </CardTitle>
-            <CardDescription>
-              Set your home country to personalize your travel map and statistics
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {homeCountry && (
-              <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-lg">
-                <Check className="h-4 w-4 text-primary" />
-                <span className="text-sm">Currently set to: <strong>{homeCountry}</strong></span>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-primary" />
+                Home Country
+              </CardTitle>
+              <CardDescription>
+                Set your home country to personalize your travel map and statistics
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {homeCountry && (
+                <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-lg">
+                  <Check className="h-4 w-4 text-primary" />
+                  <span className="text-sm">Currently set to: <strong>{homeCountry}</strong></span>
+                </div>
+              )}
+              
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search countries..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
               </div>
-            )}
-            
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search countries..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
 
-            <ScrollArea className="h-64 border rounded-lg">
-              <div className="p-2 space-y-1">
-                {filteredCountries.map((country) => (
-                  <Button
-                    key={country.code}
-                    variant={homeCountry === country.name ? "default" : "ghost"}
-                    className="w-full justify-start gap-2"
-                    onClick={() => handleSelectCountry(country.name)}
-                    disabled={saving}
-                  >
-                    <span className="text-lg">{country.flag}</span>
-                    <span>{country.name}</span>
-                    {homeCountry === country.name && (
-                      <Check className="h-4 w-4 ml-auto" />
-                    )}
-                  </Button>
-                ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+              <ScrollArea className="h-64 border rounded-lg">
+                <div className="p-2 space-y-1">
+                  {filteredCountries.map((country) => (
+                    <Button
+                      key={country.code}
+                      variant={homeCountry === country.name ? "default" : "ghost"}
+                      className="w-full justify-start gap-2"
+                      onClick={() => handleSelectCountry(country.name)}
+                      disabled={saving}
+                    >
+                      <span className="text-lg">{country.flag}</span>
+                      <span>{country.name}</span>
+                      {homeCountry === country.name && (
+                        <Check className="h-4 w-4 ml-auto" />
+                      )}
+                    </Button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+
+          {/* Data Export Section */}
+          <DataExportSection />
+        </div>
       </div>
     </AppLayout>
   );
