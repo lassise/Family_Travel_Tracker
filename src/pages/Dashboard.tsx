@@ -29,7 +29,7 @@ import {
 const Dashboard = () => {
   const { user, profile, loading: authLoading, needsOnboarding } = useAuth();
   const { trips, loading: tripsLoading } = useTrips();
-  const { familyMembers, countries, wishlist, homeCountry, loading: familyLoading, totalContinents } = useFamilyData();
+  const { familyMembers, countries, wishlist, homeCountry, loading: familyLoading, totalContinents, refetch: refetchFamilyData } = useFamilyData();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -101,7 +101,8 @@ const Dashboard = () => {
           <InteractiveWorldMap 
             countries={countries} 
             wishlist={wishlist} 
-            homeCountry={homeCountry} 
+            homeCountry={homeCountry}
+            onRefetch={refetchFamilyData}
           />
         </div>
 
