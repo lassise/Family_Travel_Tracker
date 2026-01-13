@@ -125,7 +125,9 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
                       <div className="flex items-center gap-3">
                         <span className="text-3xl">{displayFlag}</span>
                         <div>
-                          <h3 className="font-semibold text-foreground">{country.name}</h3>
+                          <h3 className="font-semibold text-foreground">
+                            {displayFlag} {country.name}
+                          </h3>
                           <div className="flex items-center gap-2 mt-1">
                             <Badge variant="outline" className="text-xs">
                               {country.continent}

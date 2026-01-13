@@ -12,6 +12,7 @@ import { getAllCountries, searchCountries } from '@/lib/countriesData';
 import StateMapDialog from './StateMapDialog';
 import CountryQuickActionDialog from './CountryQuickActionDialog';
 import MapColorSettings, { MapColors, defaultMapColors } from './MapColorSettings';
+import CountryVisitDetailsDialog from '@/components/CountryVisitDetailsDialog';
 
 // Country to ISO 3166-1 alpha-3 mapping for Mapbox
 const countryToISO3: Record<string, string> = {
@@ -109,6 +110,14 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
     name: string;
     flag: string;
     continent: string;
+  } | null>(null);
+  
+  // Visit details dialog state (for "Add Details" option)
+  const [visitDetailsOpen, setVisitDetailsOpen] = useState(false);
+  const [visitDetailsCountry, setVisitDetailsCountry] = useState<{
+    id: string;
+    name: string;
+    code: string;
   } | null>(null);
   
   const { stateVisits, getStateVisitCount } = useStateVisits();
@@ -346,6 +355,12 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
       setStateDialogOpen(true);
     }
   }, [countries]);
+
+  // Handler for opening visit details dialog (from quick action)
+  const handleOpenVisitDetails = useCallback((countryId: string, countryName: string, countryCode: string) => {
+    setVisitDetailsCountry({ id: countryId, name: countryName, code: countryCode });
+    setVisitDetailsOpen(true);
+  }, []);
 
   useEffect(() => {
     const fetchToken = async () => {
@@ -644,7 +659,25 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
           onRefetch?.();
         }}
         onOpenStateTracking={handleOpenStateTracking}
+        onOpenVisitDetails={handleOpenVisitDetails}
       />
+
+      {/* Visit Details Dialog for "Add Details" option */}
+      {visitDetailsCountry && (
+        <CountryVisitDetailsDialog
+          countryId={visitDetailsCountry.id}
+          countryName={visitDetailsCountry.name}
+          countryCode={visitDetailsCountry.code}
+          onUpdate={() => {
+            onRefetch?.();
+          }}
+          open={visitDetailsOpen}
+          onOpenChange={(open) => {
+            setVisitDetailsOpen(open);
+            if (!open) setVisitDetailsCountry(null);
+          }}
+        />
+      )}
     </Card>
   );
 };

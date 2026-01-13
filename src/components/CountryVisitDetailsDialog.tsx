@@ -163,6 +163,9 @@ interface CountryVisitDetailsDialogProps {
   countryCode: string;
   onUpdate: () => void;
   buttonLabel?: string;
+  // Optional controlled props
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 // City picker component
@@ -496,8 +499,22 @@ const CountryVisitDetailsDialog = ({
   countryCode,
   onUpdate,
   buttonLabel = "Details",
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: CountryVisitDetailsDialogProps) => {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  
+  // Support both controlled and uncontrolled usage
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (value: boolean) => {
+    if (isControlled && controlledOnOpenChange) {
+      controlledOnOpenChange(value);
+    } else {
+      setInternalOpen(value);
+    }
+  };
+
   const [visitDetails, setVisitDetails] = useState<VisitDetail[]>([]);
   const [cityVisits, setCityVisits] = useState<CityVisit[]>([]);
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);

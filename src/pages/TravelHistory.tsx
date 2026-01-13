@@ -184,7 +184,7 @@ const TravelHistory = () => {
               {activeTab === 'countries' && (
                 <div className="space-y-8">
                   <CountryTracker 
-                    countries={countries} 
+                    countries={countries.filter(c => c.visitedBy.length > 0)} 
                     familyMembers={familyMembers}
                     onUpdate={refetch}
                   />
