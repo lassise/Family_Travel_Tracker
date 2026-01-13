@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { MapPin, Heart, X, Loader2, Check, Map } from 'lucide-react';
+import { MapPin, Heart, X, Loader2, Check, Map, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { getAllCountries } from '@/lib/countriesData';
 import { toast } from 'sonner';
 import { countriesWithStates, countryNameToCode } from '@/lib/statesData';
 
@@ -22,6 +21,7 @@ interface CountryQuickActionDialogProps {
   isWishlisted: boolean;
   onActionComplete: () => void;
   onOpenStateTracking?: (countryId: string, countryName: string) => void;
+  onOpenVisitDetails?: (countryId: string, countryName: string, countryCode: string) => void;
 }
 
 const CountryQuickActionDialog = ({
@@ -32,50 +32,61 @@ const CountryQuickActionDialog = ({
   isWishlisted,
   onActionComplete,
   onOpenStateTracking,
+  onOpenVisitDetails,
 }: CountryQuickActionDialogProps) => {
-  const [loading, setLoading] = useState<'visited' | 'wishlist' | 'remove-visited' | 'remove-wishlist' | null>(null);
+  const [loading, setLoading] = useState<'visited-quick' | 'visited-details' | 'wishlist' | 'remove-visited' | 'remove-wishlist' | null>(null);
 
   if (!countryInfo) return null;
 
   const hasStateTracking = countryNameToCode[countryInfo.name] && 
     countriesWithStates.includes(countryNameToCode[countryInfo.name]);
 
-  const handleAddVisited = async () => {
-    setLoading('visited');
+  // Helper to ensure country exists and get its ID
+  const ensureCountryExists = async (userId: string): Promise<string> => {
+    const { data: existingCountry } = await supabase
+      .from('countries')
+      .select('id')
+      .eq('name', countryInfo.name)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (existingCountry) {
+      return existingCountry.id;
+    }
+
+    const { data: newCountry, error: insertError } = await supabase
+      .from('countries')
+      .insert({
+        name: countryInfo.name,
+        flag: countryInfo.flag,
+        continent: countryInfo.continent,
+        user_id: userId,
+      })
+      .select('id')
+      .single();
+
+    if (insertError) throw insertError;
+    return newCountry.id;
+  };
+
+  // Get country code from name for the details dialog
+  const getCountryCode = (): string => {
+    return countryNameToCode[countryInfo.name] || countryInfo.iso3?.slice(0, 2) || '';
+  };
+
+  const handleAddVisitedQuick = async () => {
+    setLoading('visited-quick');
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // First, ensure country exists in countries table
-      let countryId: string;
-      const { data: existingCountry } = await supabase
-        .from('countries')
-        .select('id')
-        .eq('name', countryInfo.name)
-        .maybeSingle();
-
-      if (existingCountry) {
-        countryId = existingCountry.id;
-      } else {
-        const { data: newCountry, error: insertError } = await supabase
-          .from('countries')
-          .insert({
-            name: countryInfo.name,
-            flag: countryInfo.flag,
-            continent: countryInfo.continent,
-            user_id: user.id,
-          })
-          .select('id')
-          .single();
-
-        if (insertError) throw insertError;
-        countryId = newCountry.id;
-      }
+      const countryId = await ensureCountryExists(user.id);
 
       // Get first family member
       const { data: members } = await supabase
         .from('family_members')
         .select('id')
+        .eq('user_id', user.id)
         .limit(1);
 
       if (members && members.length > 0) {
@@ -112,37 +123,67 @@ const CountryQuickActionDialog = ({
     }
   };
 
+  const handleAddVisitedWithDetails = async () => {
+    setLoading('visited-details');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const countryId = await ensureCountryExists(user.id);
+
+      // Get first family member and add visit
+      const { data: members } = await supabase
+        .from('family_members')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1);
+
+      if (members && members.length > 0) {
+        const { data: existingVisit } = await supabase
+          .from('country_visits')
+          .select('id')
+          .eq('country_id', countryId)
+          .eq('family_member_id', members[0].id)
+          .maybeSingle();
+
+        if (!existingVisit) {
+          await supabase.from('country_visits').insert({
+            country_id: countryId,
+            family_member_id: members[0].id,
+            user_id: user.id,
+          });
+        }
+      }
+
+      // Remove from wishlist if it was there
+      if (isWishlisted) {
+        await supabase.from('country_wishlist').delete().eq('country_id', countryId);
+      }
+
+      onActionComplete();
+      onOpenChange(false);
+
+      // Open the visit details dialog
+      if (onOpenVisitDetails) {
+        onOpenVisitDetails(countryId, countryInfo.name, getCountryCode());
+      }
+
+      toast.success(`${countryInfo.flag} ${countryInfo.name} added! Opening details...`);
+    } catch (error) {
+      console.error('Error adding visited country:', error);
+      toast.error('Failed to add country');
+    } finally {
+      setLoading(null);
+    }
+  };
+
   const handleAddWishlist = async () => {
     setLoading('wishlist');
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Ensure country exists
-      let countryId: string;
-      const { data: existingCountry } = await supabase
-        .from('countries')
-        .select('id')
-        .eq('name', countryInfo.name)
-        .maybeSingle();
-
-      if (existingCountry) {
-        countryId = existingCountry.id;
-      } else {
-        const { data: newCountry, error: insertError } = await supabase
-          .from('countries')
-          .insert({
-            name: countryInfo.name,
-            flag: countryInfo.flag,
-            continent: countryInfo.continent,
-            user_id: user.id,
-          })
-          .select('id')
-          .single();
-
-        if (insertError) throw insertError;
-        countryId = newCountry.id;
-      }
+      const countryId = await ensureCountryExists(user.id);
 
       // Check if already in wishlist
       const { data: existingWishlist } = await supabase
@@ -172,10 +213,14 @@ const CountryQuickActionDialog = ({
   const handleRemoveVisited = async () => {
     setLoading('remove-visited');
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { data: existingCountry } = await supabase
         .from('countries')
         .select('id')
         .eq('name', countryInfo.name)
+        .eq('user_id', user.id)
         .maybeSingle();
 
       if (existingCountry) {
@@ -195,10 +240,14 @@ const CountryQuickActionDialog = ({
   const handleRemoveWishlist = async () => {
     setLoading('remove-wishlist');
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { data: existingCountry } = await supabase
         .from('countries')
         .select('id')
         .eq('name', countryInfo.name)
+        .eq('user_id', user.id)
         .maybeSingle();
 
       if (existingCountry) {
@@ -217,10 +266,14 @@ const CountryQuickActionDialog = ({
 
   const handleOpenStateTracking = async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { data: existingCountry } = await supabase
         .from('countries')
         .select('id')
         .eq('name', countryInfo.name)
+        .eq('user_id', user.id)
         .maybeSingle();
 
       if (existingCountry && onOpenStateTracking) {
@@ -260,19 +313,54 @@ const CountryQuickActionDialog = ({
           {/* Action buttons */}
           <div className="grid gap-2">
             {!isVisited ? (
-              <Button
-                onClick={handleAddVisited}
-                disabled={loading !== null}
-                className="w-full justify-start gap-2"
-                variant="default"
-              >
-                {loading === 'visited' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <MapPin className="h-4 w-4" />
+              <>
+                {/* Visited Quick */}
+                <Button
+                  onClick={handleAddVisitedQuick}
+                  disabled={loading !== null}
+                  className="w-full justify-start gap-2"
+                  variant="default"
+                >
+                  {loading === 'visited-quick' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MapPin className="h-4 w-4" />
+                  )}
+                  Add to Visited (Quick)
+                </Button>
+
+                {/* Visited with Details */}
+                <Button
+                  onClick={handleAddVisitedWithDetails}
+                  disabled={loading !== null}
+                  className="w-full justify-start gap-2"
+                  variant="outline"
+                >
+                  {loading === 'visited-details' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
+                  Add to Visited (Add Details)
+                </Button>
+
+                {/* Wishlist - only show if not visited and not already wishlisted */}
+                {!isWishlisted && (
+                  <Button
+                    onClick={handleAddWishlist}
+                    disabled={loading !== null}
+                    className="w-full justify-start gap-2"
+                    variant="secondary"
+                  >
+                    {loading === 'wishlist' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Heart className="h-4 w-4" />
+                    )}
+                    Add to Wish List
+                  </Button>
                 )}
-                Mark as Visited
-              </Button>
+              </>
             ) : (
               <Button
                 onClick={handleRemoveVisited}
@@ -289,21 +377,8 @@ const CountryQuickActionDialog = ({
               </Button>
             )}
 
-            {!isWishlisted && !isVisited ? (
-              <Button
-                onClick={handleAddWishlist}
-                disabled={loading !== null}
-                className="w-full justify-start gap-2"
-                variant="secondary"
-              >
-                {loading === 'wishlist' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Heart className="h-4 w-4" />
-                )}
-                Add to Wishlist
-              </Button>
-            ) : isWishlisted ? (
+            {/* Remove from wishlist */}
+            {isWishlisted && (
               <Button
                 onClick={handleRemoveWishlist}
                 disabled={loading !== null}
@@ -317,8 +392,9 @@ const CountryQuickActionDialog = ({
                 )}
                 Remove from Wishlist
               </Button>
-            ) : null}
+            )}
 
+            {/* State tracking - only for visited countries with state tracking */}
             {isVisited && hasStateTracking && onOpenStateTracking && (
               <Button
                 onClick={handleOpenStateTracking}
