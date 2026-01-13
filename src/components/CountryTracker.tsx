@@ -107,12 +107,21 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
         <div className="space-y-3">
           {countries.map((country) => {
             const summary = getCountrySummary(country.id);
-            const countryCode = getCountryCode(country.name);
-            const displayFlag = countryCode 
-              ? getEmojiFlag(countryCode as TCountryCode) 
-              : country.flag;
+
+            // Some older records have the ISO2 code prefixed into the name (e.g. "AT Austria")
+            // and/or store the ISO2 code in `flag` instead of an emoji.
+            const parsed = (country.name || "").match(/^([A-Z]{2})\s+(.+)$/);
+            const codeFromName = parsed?.[1] || "";
+            const displayName = parsed?.[2] || country.name;
+
+            const countryCode = (codeFromName || getCountryCode(displayName) || getCountryCode(country.name) || "").toUpperCase();
+            const flagFromCode = countryCode ? getEmojiFlag(countryCode as TCountryCode) : "";
+
+            const storedFlag = (country.flag || "").trim();
+            const displayFlag = /^[A-Z]{2}$/.test(storedFlag) ? (flagFromCode || storedFlag) : (storedFlag || flagFromCode);
+
             const isExpanded = expandedCountries.has(country.id);
-            
+
             return (
               <Collapsible
                 key={country.id}
@@ -123,10 +132,10 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
                   <CollapsibleTrigger asChild>
                     <button className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors text-left">
                       <div className="flex items-center gap-3">
-                        <span className="text-4xl leading-none">{country.flag}</span>
+                        <span className="text-4xl leading-none">{displayFlag}</span>
                         <div>
                           <h3 className="font-semibold text-foreground flex items-center gap-2">
-                            <span className="text-xl">{country.flag}</span> {country.name}
+                            <span className="text-xl">{displayFlag}</span> {displayName}
                           </h3>
                           <div className="flex items-center gap-2 mt-1">
                             <Badge variant="outline" className="text-xs">

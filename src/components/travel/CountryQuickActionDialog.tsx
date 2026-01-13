@@ -5,6 +5,7 @@ import { MapPin, Heart, X, Loader2, Check, Map, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { countriesWithStates, countryNameToCode } from '@/lib/statesData';
+import { getEmojiFlag, type TCountryCode } from 'countries-list';
 
 interface CountryInfo {
   iso3: string;
@@ -54,11 +55,18 @@ const CountryQuickActionDialog = ({
       return existingCountry.id;
     }
 
+    // The map payload can sometimes provide a 2-letter code instead of an emoji.
+    // Normalize to an emoji flag before inserting.
+    const code = getCountryCode().toUpperCase();
+    const normalizedFlag = /^[A-Z]{2}$/.test((countryInfo.flag || '').trim())
+      ? (code ? getEmojiFlag(code as TCountryCode) : countryInfo.flag)
+      : countryInfo.flag;
+
     const { data: newCountry, error: insertError } = await supabase
       .from('countries')
       .insert({
         name: countryInfo.name,
-        flag: countryInfo.flag,
+        flag: normalizedFlag,
         continent: countryInfo.continent,
         user_id: userId,
       })
