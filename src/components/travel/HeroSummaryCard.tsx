@@ -1,22 +1,34 @@
 import { useMemo, memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Globe2, Users, Plane, Calendar } from "lucide-react";
+import { Globe2, Users, Plane, Calendar, MapPin } from "lucide-react";
 import { Country, FamilyMember } from "@/hooks/useFamilyData";
 import { useVisitDetails } from "@/hooks/useVisitDetails";
+import { useHomeCountry } from "@/hooks/useHomeCountry";
+import { useStateVisits } from "@/hooks/useStateVisits";
 
 interface HeroSummaryCardProps {
   countries: Country[];
   familyMembers: FamilyMember[];
   totalContinents: number;
+  homeCountry?: string | null;
 }
 
-const HeroSummaryCard = memo(({ countries, familyMembers, totalContinents }: HeroSummaryCardProps) => {
+const HeroSummaryCard = memo(({ countries, familyMembers, totalContinents, homeCountry }: HeroSummaryCardProps) => {
   const { visitDetails } = useVisitDetails();
+  const resolvedHome = useHomeCountry(homeCountry);
+  const { getStateVisitCount } = useStateVisits();
   
+  // Exclude home country from visited countries count
   const visitedCountries = useMemo(() => 
-    countries.filter(c => c.visitedBy.length > 0),
-    [countries]
+    countries.filter(c => c.visitedBy.length > 0 && !resolvedHome.isHomeCountry(c.name)),
+    [countries, resolvedHome]
   );
+
+  // Get states visited for home country
+  const statesVisitedCount = useMemo(() => {
+    if (!resolvedHome.iso2 || !resolvedHome.hasStateTracking) return 0;
+    return getStateVisitCount(resolvedHome.iso2);
+  }, [resolvedHome, getStateVisitCount]);
   
   // Memoize earliest year calculation
   const earliestYear = useMemo(() => {
@@ -34,36 +46,62 @@ const HeroSummaryCard = memo(({ countries, familyMembers, totalContinents }: Her
     }, null as number | null);
   }, [visitDetails]);
 
-  const stats = useMemo(() => [
-    {
-      icon: Globe2,
-      value: visitedCountries.length,
-      label: "Countries",
-      color: "text-primary",
-      bgColor: "bg-primary/10",
-    },
-    {
+  const stats = useMemo(() => {
+    const baseStats: Array<{
+      icon: typeof Globe2;
+      value: number | string;
+      label: string;
+      color: string;
+      bgColor: string;
+    }> = [
+      {
+        icon: Globe2,
+        value: visitedCountries.length,
+        label: "Countries",
+        color: "text-primary",
+        bgColor: "bg-primary/10",
+      },
+    ];
+
+    // Add states visited if home country supports it
+    if (resolvedHome.hasStateTracking && statesVisitedCount > 0) {
+      baseStats.push({
+        icon: MapPin,
+        value: statesVisitedCount,
+        label: "States",
+        color: "text-accent",
+        bgColor: "bg-accent/10",
+      });
+    }
+
+    baseStats.push({
       icon: Plane,
       value: totalContinents,
       label: "Continents",
       color: "text-secondary",
       bgColor: "bg-secondary/10",
-    },
-    {
+    });
+
+    baseStats.push({
       icon: Users,
       value: familyMembers.length,
       label: "Travelers",
       color: "text-accent",
       bgColor: "bg-accent/10",
-    },
-    ...(earliestYear ? [{
-      icon: Calendar,
-      value: `'${earliestYear.toString().slice(-2)}`,
-      label: "Since",
-      color: "text-muted-foreground",
-      bgColor: "bg-muted",
-    }] : []),
-  ], [visitedCountries.length, totalContinents, familyMembers.length, earliestYear]);
+    });
+
+    if (earliestYear) {
+      baseStats.push({
+        icon: Calendar,
+        value: `'${earliestYear.toString().slice(-2)}`,
+        label: "Since",
+        color: "text-muted-foreground",
+        bgColor: "bg-muted",
+      });
+    }
+
+    return baseStats;
+  }, [visitedCountries.length, totalContinents, familyMembers.length, earliestYear, resolvedHome.hasStateTracking, statesVisitedCount]);
 
   const progressPercent = useMemo(() => 
     Math.round((visitedCountries.length / 195) * 100),

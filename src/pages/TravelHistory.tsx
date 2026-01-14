@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useFamilyData } from "@/hooks/useFamilyData";
+import { useStateVisits } from "@/hooks/useStateVisits";
+import { useHomeCountry } from "@/hooks/useHomeCountry";
 import AppLayout from "@/components/layout/AppLayout";
 import CountryTracker from "@/components/CountryTracker";
 import CountryWishlist from "@/components/CountryWishlist";
@@ -19,7 +21,7 @@ import CountryComparison from "@/components/travel/CountryComparison";
 import EnhancedBucketList from "@/components/travel/EnhancedBucketList";
 import TravelMilestones from "@/components/travel/TravelMilestones";
 
-import { Loader2, BarChart3, Globe2, Trophy, Map, Camera, Users } from "lucide-react";
+import { Loader2, BarChart3, Globe2, Trophy, Map, Camera, Users, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type TabKey = 'overview' | 'analytics' | 'achievements' | 'countries' | 'memories';
@@ -35,6 +37,8 @@ const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
 const TravelHistory = () => {
   const { user, loading: authLoading, needsOnboarding, profile } = useAuth();
   const { familyMembers, countries, wishlist, homeCountry, loading, refetch, totalContinents } = useFamilyData();
+  const { getStateVisitCount } = useStateVisits();
+  const resolvedHome = useHomeCountry(homeCountry);
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
@@ -76,7 +80,17 @@ const TravelHistory = () => {
     );
   }
 
-  const visitedCountriesCount = countries.filter(c => c.visitedBy.length > 0).length;
+  // Count visited countries excluding home country
+  const visitedCountriesCount = useMemo(() => 
+    countries.filter(c => c.visitedBy.length > 0 && !resolvedHome.isHomeCountry(c.name)).length,
+    [countries, resolvedHome]
+  );
+
+  // Get states visited count for home country
+  const statesVisitedCount = useMemo(() => {
+    if (!resolvedHome.iso2 || !resolvedHome.hasStateTracking) return 0;
+    return getStateVisitCount(resolvedHome.iso2);
+  }, [resolvedHome, getStateVisitCount]);
 
   return (
     <AppLayout>
@@ -98,6 +112,13 @@ const TravelHistory = () => {
                   <span className="font-semibold text-foreground">{visitedCountriesCount}</span>
                   <span className="text-muted-foreground hidden sm:inline">countries</span>
                 </div>
+                {resolvedHome.hasStateTracking && (
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="h-4 w-4 text-accent" />
+                    <span className="font-semibold text-foreground">{statesVisitedCount}/50</span>
+                    <span className="text-muted-foreground hidden sm:inline">states</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-1.5">
                   <Map className="h-4 w-4 text-secondary" />
                   <span className="font-semibold text-foreground">{totalContinents}</span>
@@ -150,7 +171,7 @@ const TravelHistory = () => {
             <>
               {activeTab === 'overview' && (
                 <div className="space-y-6">
-                  <HeroSummaryCard countries={countries} familyMembers={familyMembers} totalContinents={totalContinents} />
+                  <HeroSummaryCard countries={countries} familyMembers={familyMembers} totalContinents={totalContinents} homeCountry={homeCountry} />
                   <InteractiveWorldMap countries={countries} wishlist={wishlist} homeCountry={homeCountry} onRefetch={refetch} />
                   <TravelMilestones countries={countries} familyMembers={familyMembers} totalContinents={totalContinents} />
                   <div className="grid lg:grid-cols-2 gap-6">
