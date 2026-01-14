@@ -3,6 +3,8 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
 import { useFamilyData } from "@/hooks/useFamilyData";
+import { useStateVisits } from "@/hooks/useStateVisits";
+import { useHomeCountry } from "@/hooks/useHomeCountry";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +32,8 @@ const Dashboard = () => {
   const { user, profile, loading: authLoading, needsOnboarding } = useAuth();
   const { trips, loading: tripsLoading } = useTrips();
   const { familyMembers, countries, wishlist, homeCountry, loading: familyLoading, totalContinents, refetch: refetchFamilyData } = useFamilyData();
+  const { getStateVisitCount } = useStateVisits();
+  const resolvedHome = useHomeCountry(homeCountry);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -51,10 +55,17 @@ const Dashboard = () => {
     [trips]
   );
   
+  // Count visited countries excluding home country
   const visitedCountriesCount = useMemo(() => 
-    countries.filter(c => c.visitedBy.length > 0).length,
-    [countries]
+    countries.filter(c => c.visitedBy.length > 0 && !resolvedHome.isHomeCountry(c.name)).length,
+    [countries, resolvedHome]
   );
+
+  // Get states visited count for home country
+  const statesVisitedCount = useMemo(() => {
+    if (!resolvedHome.iso2 || !resolvedHome.hasStateTracking) return 0;
+    return getStateVisitCount(resolvedHome.iso2);
+  }, [resolvedHome, getStateVisitCount]);
 
   const formatDate = useCallback((date: string | null) => {
     if (!date) return "";
@@ -92,7 +103,8 @@ const Dashboard = () => {
           <HeroSummaryCard 
             countries={countries} 
             familyMembers={familyMembers} 
-            totalContinents={totalContinents} 
+            totalContinents={totalContinents}
+            homeCountry={homeCountry}
           />
         </div>
 
@@ -323,6 +335,15 @@ const Dashboard = () => {
                 <p className="text-sm text-muted-foreground">Countries Visited</p>
               </CardContent>
             </Card>
+            {resolvedHome.hasStateTracking && (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-6">
+                  <MapPin className="h-8 w-8 text-accent mb-2" />
+                  <p className="text-3xl font-bold">{statesVisitedCount}/50</p>
+                  <p className="text-sm text-muted-foreground">States Visited</p>
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-6">
                 <Map className="h-8 w-8 text-secondary mb-2" />
@@ -337,13 +358,15 @@ const Dashboard = () => {
                 <p className="text-sm text-muted-foreground">Total Trips</p>
               </CardContent>
             </Card>
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-6">
-                <Trophy className="h-8 w-8 text-primary mb-2" />
-                <p className="text-3xl font-bold">{familyMembers.length}</p>
-                <p className="text-sm text-muted-foreground">Family Members</p>
-              </CardContent>
-            </Card>
+            {!resolvedHome.hasStateTracking && (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-6">
+                  <Trophy className="h-8 w-8 text-primary mb-2" />
+                  <p className="text-3xl font-bold">{familyMembers.length}</p>
+                  <p className="text-sm text-muted-foreground">Family Members</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </section>
       </div>

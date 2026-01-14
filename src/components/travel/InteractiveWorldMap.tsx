@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useStateVisits } from '@/hooks/useStateVisits';
 import { countriesWithStates, countryNameToCode, getStatesForCountry } from '@/lib/statesData';
 import { getAllCountries, searchCountries } from '@/lib/countriesData';
+import { useHomeCountry } from '@/hooks/useHomeCountry';
 import StateMapDialog from './StateMapDialog';
 import CountryQuickActionDialog from './CountryQuickActionDialog';
 import MapColorSettings, { MapColors, defaultMapColors } from './MapColorSettings';
@@ -121,6 +122,9 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
   } | null>(null);
   
   const { stateVisits, getStateVisitCount } = useStateVisits();
+  
+  // Use the home country hook for standardized handling
+  const resolvedHome = useHomeCountry(homeCountry);
 
   // Save colors to localStorage when they change
   const handleColorsChange = useCallback((newColors: MapColors) => {
@@ -274,6 +278,12 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
     }
     setQuickActionOpen(true);
   }, []);
+
+  // Check if clicked country is the home country
+  const isClickedCountryHomeCountry = useMemo(() => {
+    if (!clickedCountryInfo || !resolvedHome.name) return false;
+    return resolvedHome.isHomeCountry(clickedCountryInfo.name);
+  }, [clickedCountryInfo, resolvedHome]);
 
   // Check if clicked country is visited or wishlisted
   const isClickedCountryVisited = useMemo(() => {
@@ -655,6 +665,7 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
         countryInfo={clickedCountryInfo}
         isVisited={isClickedCountryVisited}
         isWishlisted={isClickedCountryWishlisted}
+        isHomeCountry={isClickedCountryHomeCountry}
         onActionComplete={() => {
           onRefetch?.();
         }}

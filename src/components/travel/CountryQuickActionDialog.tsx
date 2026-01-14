@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { MapPin, Heart, X, Loader2, Check, Map, FileText } from 'lucide-react';
+import { MapPin, Heart, X, Loader2, Check, Map, FileText, Home } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { countriesWithStates, countryNameToCode } from '@/lib/statesData';
@@ -19,6 +19,7 @@ interface CountryQuickActionDialogProps {
   countryInfo: CountryInfo | null;
   isVisited: boolean;
   isWishlisted: boolean;
+  isHomeCountry?: boolean;
   onActionComplete: () => void;
   onOpenStateTracking?: (countryId: string, countryName: string) => void;
   onOpenVisitDetails?: (countryId: string, countryName: string, countryCode: string) => void;
@@ -30,6 +31,7 @@ const CountryQuickActionDialog = ({
   countryInfo,
   isVisited,
   isWishlisted,
+  isHomeCountry = false,
   onActionComplete,
   onOpenStateTracking,
   onOpenVisitDetails,
@@ -272,6 +274,9 @@ const CountryQuickActionDialog = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // For home country, ensure the country record exists even if not "visited"
+      let countryId: string | null = null;
+      
       const { data: existingCountry } = await supabase
         .from('countries')
         .select('id')
@@ -279,8 +284,29 @@ const CountryQuickActionDialog = ({
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (existingCountry && onOpenStateTracking) {
-        onOpenStateTracking(existingCountry.id, countryInfo.name);
+      if (existingCountry) {
+        countryId = existingCountry.id;
+      } else if (isHomeCountry && hasStateTracking) {
+        // Create country record for home country state tracking
+        const iso2Code = getCountryCode().toUpperCase();
+        const { data: newCountry, error } = await supabase
+          .from('countries')
+          .insert({
+            name: countryInfo.name,
+            flag: iso2Code || countryInfo.flag,
+            continent: countryInfo.continent,
+            user_id: user.id,
+          })
+          .select('id')
+          .single();
+
+        if (!error && newCountry) {
+          countryId = newCountry.id;
+        }
+      }
+
+      if (countryId && onOpenStateTracking) {
+        onOpenStateTracking(countryId, countryInfo.name);
         onOpenChange(false);
       }
     } catch (error) {
@@ -301,7 +327,12 @@ const CountryQuickActionDialog = ({
         <div className="space-y-3 py-4">
           {/* Status badges */}
           <div className="flex gap-2 flex-wrap">
-            {isVisited && (
+            {isHomeCountry && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-primary/20 text-primary text-sm">
+                <Home className="h-3 w-3" /> Home Country
+              </span>
+            )}
+            {isVisited && !isHomeCountry && (
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-accent/20 text-accent text-sm">
                 <Check className="h-3 w-3" /> Visited
               </span>
@@ -315,7 +346,21 @@ const CountryQuickActionDialog = ({
 
           {/* Action buttons */}
           <div className="grid gap-2">
-            {!isVisited ? (
+            {/* Home country special handling - show state tracking prominently */}
+            {isHomeCountry && hasStateTracking && onOpenStateTracking && (
+              <Button
+                onClick={handleOpenStateTracking}
+                disabled={loading !== null}
+                className="w-full justify-start gap-2"
+                variant="default"
+              >
+                <Map className="h-4 w-4" />
+                Track States/Regions
+              </Button>
+            )}
+
+            {/* For non-home countries that haven't been visited */}
+            {!isVisited && !isHomeCountry ? (
               <>
                 {/* Visited Quick */}
                 <Button
@@ -364,7 +409,7 @@ const CountryQuickActionDialog = ({
                   </Button>
                 )}
               </>
-            ) : (
+            ) : isVisited && !isHomeCountry ? (
               <>
                 {/* State tracking - show first for visited countries with state tracking */}
                 {hasStateTracking && onOpenStateTracking && (
@@ -394,7 +439,7 @@ const CountryQuickActionDialog = ({
                   Remove from Visited
                 </Button>
               </>
-            )}
+            ) : null}
 
             {/* Remove from wishlist */}
             {isWishlisted && (
