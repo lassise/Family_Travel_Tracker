@@ -11,6 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Settings as SettingsIcon, Globe, Search, Check } from "lucide-react";
 import { countries as countriesList } from "countries-list";
 import DataExportSection from "@/components/settings/DataExportSection";
+import CountryFlag from "@/components/common/CountryFlag";
+import { getEffectiveFlagCode } from "@/lib/countriesData";
 
 interface Country {
   code: string;
@@ -131,21 +133,30 @@ const Settings = () => {
 
               <ScrollArea className="h-64 border rounded-lg">
                 <div className="p-2 space-y-1">
-                  {filteredCountries.map((country) => (
-                    <Button
-                      key={country.code}
-                      variant={homeCountry === country.name ? "default" : "ghost"}
-                      className="w-full justify-start gap-2"
-                      onClick={() => handleSelectCountry(country.name)}
-                      disabled={saving}
-                    >
-                      <span className="text-lg">{country.flag}</span>
-                      <span>{country.name}</span>
-                      {homeCountry === country.name && (
-                        <Check className="h-4 w-4 ml-auto" />
-                      )}
-                    </Button>
-                  ))}
+                  {filteredCountries.map((country) => {
+                    const { code, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
+                    return (
+                      <Button
+                        key={country.code}
+                        variant={homeCountry === country.name ? "default" : "ghost"}
+                        className="w-full justify-start gap-2"
+                        onClick={() => handleSelectCountry(country.name)}
+                        disabled={saving}
+                      >
+                        <span className="text-lg inline-flex items-center">
+                          {isSubdivision || code ? (
+                            <CountryFlag countryCode={code} countryName={country.name} size="md" />
+                          ) : (
+                            country.flag
+                          )}
+                        </span>
+                        <span>{country.name}</span>
+                        {homeCountry === country.name && (
+                          <Check className="h-4 w-4 ml-auto" />
+                        )}
+                      </Button>
+                    );
+                  })}
                 </div>
               </ScrollArea>
             </CardContent>

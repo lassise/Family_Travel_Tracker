@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown, Globe2 } from "lucide-react";
 import type { Country, FamilyMember } from "@/hooks/useFamilyData";
+import CountryFlag from "@/components/common/CountryFlag";
+import { getEffectiveFlagCode } from "@/lib/countriesData";
 
 interface ContinentFilterProps {
   countries: Country[];
@@ -118,6 +120,7 @@ const ContinentFilter = ({ countries, familyMembers }: ContinentFilterProps) => 
                     .map((country) => {
                       const visitedByAnyone = isVisitedByAnyone(country);
                       const visitedByAll = isVisitedByAll(country);
+                      const { code, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
                       
                       return (
                         <DropdownMenuCheckboxItem
@@ -128,7 +131,13 @@ const ContinentFilter = ({ countries, familyMembers }: ContinentFilterProps) => 
                         >
                           <div className="flex items-center justify-between w-full gap-2">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <span className="text-lg">{country.flag}</span>
+                              <span className="text-lg inline-flex items-center">
+                                {isSubdivision || code ? (
+                                  <CountryFlag countryCode={code} countryName={country.name} size="md" />
+                                ) : (
+                                  country.flag
+                                )}
+                              </span>
                               <span className={`text-sm truncate ${!visitedByAnyone ? 'text-muted-foreground' : ''}`}>
                                 {country.name}
                               </span>

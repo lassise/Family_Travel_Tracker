@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Globe } from "lucide-react";
+import CountryFlag from "@/components/common/CountryFlag";
+import { getEffectiveFlagCode } from "@/lib/countriesData";
 
 interface Country {
   id: string;
@@ -59,15 +61,24 @@ const MemberCountriesDialog = ({ memberName, countries, countriesCount }: Member
                   <Badge variant="outline">{continentCountries.length}</Badge>
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
-                  {continentCountries.sort((a, b) => a.name.localeCompare(b.name)).map((country) => (
-                    <div
-                      key={country.id}
-                      className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                    >
-                      <span className="text-2xl">{country.flag}</span>
-                      <span className="text-sm font-medium">{country.name}</span>
-                    </div>
-                  ))}
+                  {continentCountries.sort((a, b) => a.name.localeCompare(b.name)).map((country) => {
+                    const { code, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
+                    return (
+                      <div
+                        key={country.id}
+                        className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                      >
+                        <span className="text-2xl inline-flex items-center">
+                          {isSubdivision || code ? (
+                            <CountryFlag countryCode={code} countryName={country.name} size="lg" />
+                          ) : (
+                            country.flag
+                          )}
+                        </span>
+                        <span className="text-sm font-medium">{country.name}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}

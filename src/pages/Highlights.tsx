@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Globe, MapPin, Camera, Plane } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import CountryFlag from "@/components/common/CountryFlag";
+import { getEffectiveFlagCode } from "@/lib/countriesData";
 
 interface ShareProfile {
   id: string;
@@ -196,15 +198,24 @@ const Highlights = () => {
               <h2 className="text-2xl font-bold text-foreground">Places Visited</h2>
             </div>
             <div className="flex flex-wrap gap-2">
-              {visitedCountries.map((country) => (
-                <span
-                  key={country.id}
-                  className="inline-flex items-center gap-1 bg-card border border-border px-3 py-1.5 rounded-full text-sm"
-                >
-                  <span>{country.flag}</span>
-                  <span>{country.name}</span>
-                </span>
-              ))}
+              {visitedCountries.map((country) => {
+                const { code, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
+                return (
+                  <span
+                    key={country.id}
+                    className="inline-flex items-center gap-1.5 bg-card border border-border px-3 py-1.5 rounded-full text-sm"
+                  >
+                    <span className="inline-flex items-center">
+                      {isSubdivision || code ? (
+                        <CountryFlag countryCode={code} countryName={country.name} size="sm" />
+                      ) : (
+                        country.flag
+                      )}
+                    </span>
+                    <span>{country.name}</span>
+                  </span>
+                );
+              })}
             </div>
           </section>
         )}

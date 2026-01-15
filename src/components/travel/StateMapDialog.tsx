@@ -8,6 +8,8 @@ import { useStateVisits } from '@/hooks/useStateVisits';
 import { useFamilyData, Country } from '@/hooks/useFamilyData';
 import { getStatesForCountry, countryNameToCode } from '@/lib/statesData';
 import StateGridSelector from './StateGridSelector';
+import CountryFlag from '@/components/common/CountryFlag';
+import { getEffectiveFlagCode } from '@/lib/countriesData';
 
 interface StateMapDialogProps {
   open: boolean;
@@ -117,7 +119,14 @@ const StateMapDialog = ({ open, onOpenChange, country }: StateMapDialogProps) =>
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-2xl">{country.flag}</span>
+                {(() => {
+                  const { code, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
+                  return isSubdivision || code ? (
+                    <CountryFlag countryCode={code} countryName={country.name} size="lg" />
+                  ) : (
+                    <span className="text-2xl">{country.flag}</span>
+                  );
+                })()}
                 <span>{country.name}</span>
               </div>
               <p className="text-sm text-muted-foreground font-normal mt-0.5">

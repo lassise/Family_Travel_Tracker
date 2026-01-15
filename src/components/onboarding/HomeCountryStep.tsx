@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getAllCountries } from "@/lib/countriesData";
+import { getAllCountries, getEffectiveFlagCode } from "@/lib/countriesData";
+import CountryFlag from "@/components/common/CountryFlag";
 
 interface HomeCountryStepProps {
   onHomeCountryChange: (country: string | null) => void;
@@ -85,7 +86,14 @@ const HomeCountryStep = ({ onHomeCountryChange }: HomeCountryStepProps) => {
             >
               {selectedCountryData ? (
                 <span className="flex items-center gap-2">
-                  <span className="text-xl">{selectedCountryData.flag}</span>
+                  {(() => {
+                    const { code, isSubdivision } = getEffectiveFlagCode(selectedCountryData.name, selectedCountryData.flag);
+                    return isSubdivision || code ? (
+                      <CountryFlag countryCode={code} countryName={selectedCountryData.name} size="md" />
+                    ) : (
+                      <span className="text-xl">{selectedCountryData.flag}</span>
+                    );
+                  })()}
                   <span>{selectedCountryData.name}</span>
                 </span>
               ) : (
@@ -100,23 +108,32 @@ const HomeCountryStep = ({ onHomeCountryChange }: HomeCountryStepProps) => {
               <CommandList>
                 <CommandEmpty>No country found.</CommandEmpty>
                 <CommandGroup className="max-h-[300px] overflow-auto">
-                  {countries.map((country) => (
-                    <CommandItem
-                      key={country.code}
-                      value={country.name}
-                      onSelect={() => handleSelectCountry(country.name)}
-                      className="cursor-pointer"
-                    >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          selectedCountry === country.name ? "opacity-100" : "opacity-0"
-                        )}
-                      />
-                      <span className="mr-2 text-lg">{country.flag}</span>
-                      <span>{country.name}</span>
-                    </CommandItem>
-                  ))}
+                  {countries.map((country) => {
+                    const { code, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
+                    return (
+                      <CommandItem
+                        key={country.code}
+                        value={country.name}
+                        onSelect={() => handleSelectCountry(country.name)}
+                        className="cursor-pointer"
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            selectedCountry === country.name ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <span className="mr-2 text-lg inline-flex items-center">
+                          {isSubdivision || code ? (
+                            <CountryFlag countryCode={code} countryName={country.name} size="md" />
+                          ) : (
+                            country.flag
+                          )}
+                        </span>
+                        <span>{country.name}</span>
+                      </CommandItem>
+                    );
+                  })}
                 </CommandGroup>
               </CommandList>
             </Command>
