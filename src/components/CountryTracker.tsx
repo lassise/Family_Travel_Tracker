@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,6 +13,7 @@ import { useVisitDetails } from "@/hooks/useVisitDetails";
 import { getAllCountries, getRegionCode } from "@/lib/countriesData";
 import { cn } from "@/lib/utils";
 import CountryFlag from "./common/CountryFlag";
+import CountryFilters from "./travel/CountryFilters";
 
 interface CountryTrackerProps {
   countries: Country[];
@@ -22,9 +23,63 @@ interface CountryTrackerProps {
 
 const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerProps) => {
   const { toast } = useToast();
-  const { getCountrySummary, refetch: refetchVisitDetails } = useVisitDetails();
+  const { visitDetails, getCountrySummary, refetch: refetchVisitDetails } = useVisitDetails();
   const allCountriesData = getAllCountries();
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
+  const [selectedContinent, setSelectedContinent] = useState<string>('all');
+  const [selectedYear, setSelectedYear] = useState<string>('all');
+
+  // Get unique continents and years from countries
+  const { continents, years } = useMemo(() => {
+    const continentSet = new Set<string>();
+    const yearSet = new Set<number>();
+    
+    countries.forEach(c => continentSet.add(c.continent));
+    
+    visitDetails.forEach(v => {
+      if (v.visit_date) {
+        yearSet.add(new Date(v.visit_date).getFullYear());
+      } else if (v.approximate_year) {
+        yearSet.add(v.approximate_year);
+      }
+    });
+    
+    return {
+      continents: Array.from(continentSet).sort(),
+      years: Array.from(yearSet).sort((a, b) => b - a)
+    };
+  }, [countries, visitDetails]);
+
+  // Filter countries based on selected filters
+  const filteredCountries = useMemo(() => {
+    let result = countries;
+    
+    if (selectedContinent !== 'all') {
+      result = result.filter(c => c.continent === selectedContinent);
+    }
+    
+    if (selectedYear !== 'all') {
+      const year = parseInt(selectedYear);
+      const countryIdsForYear = new Set(
+        visitDetails
+          .filter(v => {
+            if (v.visit_date) {
+              return new Date(v.visit_date).getFullYear() === year;
+            }
+            return v.approximate_year === year;
+          })
+          .map(v => v.country_id)
+      );
+      result = result.filter(c => countryIdsForYear.has(c.id));
+    }
+    
+    return result;
+  }, [countries, selectedContinent, selectedYear, visitDetails]);
+
+  const clearFilters = () => {
+    setSelectedContinent('all');
+    setSelectedYear('all');
+  };
 
   const toggleCountry = (countryId: string) => {
     setExpandedCountries(prev => {
@@ -94,7 +149,7 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
   return (
     <section className="py-20 bg-muted/30">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-12">
+        <div className="text-center mb-8">
           <h2 className="text-4xl font-bold mb-4 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             Countries We've Explored
           </h2>
@@ -104,8 +159,28 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
           <CountryDialog familyMembers={familyMembers} onSuccess={handleUpdate} />
         </div>
 
+        {/* Filters */}
+        {countries.length > 0 && (
+          <div className="mb-6">
+            <CountryFilters
+              continents={continents}
+              years={years}
+              selectedContinent={selectedContinent}
+              selectedYear={selectedYear}
+              onContinentChange={setSelectedContinent}
+              onYearChange={setSelectedYear}
+              onClear={clearFilters}
+            />
+            {(selectedContinent !== 'all' || selectedYear !== 'all') && (
+              <p className="text-sm text-muted-foreground mt-2">
+                Showing {filteredCountries.length} of {countries.length} countries
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="space-y-3">
-          {countries.map((country) => {
+          {filteredCountries.map((country) => {
             const summary = getCountrySummary(country.id);
 
             // Parse country name in case it has ISO2 prefix (legacy data: "AT Austria")
