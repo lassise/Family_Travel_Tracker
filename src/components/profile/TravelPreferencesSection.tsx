@@ -7,6 +7,8 @@ import { Loader2, Heart, Settings2, ThumbsUp, ThumbsDown, X } from "lucide-react
 import { useTravelPreferences } from "@/hooks/useTravelPreferences";
 import { useFamilyData } from "@/hooks/useFamilyData";
 import { cn } from "@/lib/utils";
+import CountryFlag from "@/components/common/CountryFlag";
+import { getEffectiveFlagCode } from "@/lib/countriesData";
 
 const TRAVEL_STYLES = [
   { id: 'adventure', label: 'Adventure', emoji: '🏔️' },
@@ -222,10 +224,18 @@ const TravelPreferencesSection = () => {
               {visitedCountries.map((country) => {
                 const isLiked = preferences?.liked_countries?.includes(country.name);
                 const isDisliked = preferences?.disliked_countries?.includes(country.name);
+                const { code, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
                 
                 return (
                   <div key={country.id} className="flex items-center gap-1 bg-muted/50 rounded-lg px-2 py-1">
-                    <span className="text-sm">{country.flag} {country.name}</span>
+                    <span className="text-sm inline-flex items-center gap-1">
+                      {isSubdivision || code ? (
+                        <CountryFlag countryCode={code} countryName={country.name} size="sm" />
+                      ) : (
+                        country.flag
+                      )}
+                      {country.name}
+                    </span>
                     <Button
                       size="icon"
                       variant="ghost"

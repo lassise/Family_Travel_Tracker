@@ -8,7 +8,8 @@ import { Globe, MapPin } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useStateVisits } from '@/hooks/useStateVisits';
 import { countriesWithStates, countryNameToCode, getStatesForCountry } from '@/lib/statesData';
-import { getAllCountries } from '@/lib/countriesData';
+import { getAllCountries, getEffectiveFlagCode } from '@/lib/countriesData';
+import CountryFlag from '@/components/common/CountryFlag';
 import { useHomeCountry } from '@/hooks/useHomeCountry';
 import StateMapDialog from './StateMapDialog';
 import CountryQuickActionDialog from './CountryQuickActionDialog';
@@ -580,6 +581,7 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
                 const totalStates = states ? Object.keys(states).length : 0;
                 const isUSA = country.name === 'United States';
                 
+                const { code: flagCode, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
                 return (
                   <Badge
                     key={country.id}
@@ -594,7 +596,14 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
                       setStateDialogOpen(true);
                     }}
                   >
-                    {country.flag} {country.name}
+                    <span className="inline-flex items-center gap-1">
+                      {isSubdivision || flagCode ? (
+                        <CountryFlag countryCode={flagCode} countryName={country.name} size="sm" />
+                      ) : (
+                        country.flag
+                      )}
+                      {country.name}
+                    </span>
                     {stateCount > 0 ? (
                       <span className={`ml-1 ${isUSA ? "text-primary-foreground" : "text-primary"}`}>
                         ({stateCount}/{totalStates})

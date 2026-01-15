@@ -60,6 +60,16 @@ export const getRegionCode = (name: string): string => {
   return '';
 };
 
+// Helper to get the effective flag code for a country (handles UK nations by name)
+export const getEffectiveFlagCode = (countryName: string, storedFlag?: string): { code: string; isSubdivision: boolean } => {
+  const regionCode = getRegionCode(countryName);
+  const normalizedFlag = (storedFlag || '').trim().toUpperCase();
+  const storedFlagIsCode = /^[A-Z]{2}(-[A-Z]{3})?$/.test(normalizedFlag);
+  const effectiveCode = (regionCode || (storedFlagIsCode ? normalizedFlag : '')).toUpperCase();
+  const isSubdivision = /^[A-Z]{2}-[A-Z]{3}$/.test(effectiveCode);
+  return { code: effectiveCode, isSubdivision };
+};
+
 // Search countries by name (including aliases)
 export const searchCountries = (query: string): CountryOption[] => {
   const lowercaseQuery = query.toLowerCase().trim();
