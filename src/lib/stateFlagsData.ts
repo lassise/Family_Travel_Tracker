@@ -11,7 +11,7 @@ export const usStateFlagUrls: Record<string, string> = {
   'US-CT': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Flag_of_Connecticut.svg/255px-Flag_of_Connecticut.svg.png',
   'US-DE': 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Flag_of_Delaware.svg/255px-Flag_of_Delaware.svg.png',
   'US-FL': 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Flag_of_Florida.svg/255px-Flag_of_Florida.svg.png',
-  'US-GA': 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/54/Flag_of_Georgia_(U.S._state).svg/255px-Flag_of_Georgia_(U.S._state).svg.png',
+  'US-GA': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Flag_of_the_State_of_Georgia.svg/255px-Flag_of_the_State_of_Georgia.svg.png',
   'US-HI': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/Flag_of_Hawaii.svg/255px-Flag_of_Hawaii.svg.png',
   'US-ID': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Flag_of_Idaho.svg/255px-Flag_of_Idaho.svg.png',
   'US-IL': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Flag_of_Illinois.svg/255px-Flag_of_Illinois.svg.png',
@@ -52,7 +52,7 @@ export const usStateFlagUrls: Record<string, string> = {
   'US-WV': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Flag_of_West_Virginia.svg/255px-Flag_of_West_Virginia.svg.png',
   'US-WI': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Flag_of_Wisconsin.svg/255px-Flag_of_Wisconsin.svg.png',
   'US-WY': 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Flag_of_Wyoming.svg/255px-Flag_of_Wyoming.svg.png',
-  'US-DC': 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Flag_of_the_District_of_Columbia.svg/255px-Flag_of_the_District_of_Columbia.svg.png',
+  'US-DC': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/Flag_of_Washington%2C_D.C.svg/255px-Flag_of_Washington%2C_D.C.svg.png',
 };
 
 // State abbreviations for display
