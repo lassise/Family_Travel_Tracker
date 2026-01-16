@@ -1,7 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { FamilyMember, Country } from '@/hooks/useFamilyData';
+import { VisitDetail } from '@/hooks/useVisitDetails';
 
 const STORAGE_KEY = 'dashboard-member-filter';
+
+interface VisitWithMembers extends VisitDetail {
+  memberIds?: string[];
+}
 
 interface UseDashboardFilterResult {
   selectedMemberId: string | null; // null means "All"
@@ -9,6 +14,7 @@ interface UseDashboardFilterResult {
   getFilteredCountries: (countries: Country[]) => Country[];
   getFilteredContinents: (countries: Country[]) => number;
   getFilterLabel: (familyMembers: FamilyMember[]) => string;
+  getFilteredEarliestYear: (visitDetails: VisitDetail[], visitMemberMap: Map<string, string[]>) => number | null;
 }
 
 export const useDashboardFilter = (familyMembers: FamilyMember[]): UseDashboardFilterResult => {
@@ -82,11 +88,39 @@ export const useDashboardFilter = (familyMembers: FamilyMember[]): UseDashboardF
     return member?.name.split(' ')[0] || 'All';
   }, [selectedMemberId]);
 
+  // Get filtered earliest year based on selected member
+  const getFilteredEarliestYear = useCallback((
+    visitDetails: VisitDetail[], 
+    visitMemberMap: Map<string, string[]>
+  ): number | null => {
+    // Filter visits based on selected member
+    const relevantVisits = selectedMemberId === null
+      ? visitDetails
+      : visitDetails.filter(visit => {
+          const memberIds = visitMemberMap.get(visit.id);
+          return memberIds?.includes(selectedMemberId);
+        });
+
+    return relevantVisits.reduce((earliest, visit) => {
+      let year: number | null = null;
+      if (visit.visit_date) {
+        year = new Date(visit.visit_date).getFullYear();
+      } else if (visit.approximate_year) {
+        year = visit.approximate_year;
+      }
+      if (year && (!earliest || year < earliest)) {
+        return year;
+      }
+      return earliest;
+    }, null as number | null);
+  }, [selectedMemberId]);
+
   return {
     selectedMemberId,
     setSelectedMemberId,
     getFilteredCountries,
     getFilteredContinents,
     getFilterLabel,
+    getFilteredEarliestYear,
   };
 };

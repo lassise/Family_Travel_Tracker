@@ -2,7 +2,6 @@ import { useMemo, memo, ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Globe2, Users, Plane, Calendar, MapPin } from "lucide-react";
 import { Country, FamilyMember } from "@/hooks/useFamilyData";
-import { useVisitDetails } from "@/hooks/useVisitDetails";
 import { useHomeCountry } from "@/hooks/useHomeCountry";
 import { useStateVisits } from "@/hooks/useStateVisits";
 
@@ -12,10 +11,17 @@ interface HeroSummaryCardProps {
   totalContinents: number;
   homeCountry?: string | null;
   filterComponent?: ReactNode;
+  earliestYear?: number | null;
 }
 
-const HeroSummaryCard = memo(({ countries, familyMembers, totalContinents, homeCountry, filterComponent }: HeroSummaryCardProps) => {
-  const { visitDetails } = useVisitDetails();
+const HeroSummaryCard = memo(({ 
+  countries, 
+  familyMembers, 
+  totalContinents, 
+  homeCountry, 
+  filterComponent,
+  earliestYear
+}: HeroSummaryCardProps) => {
   const resolvedHome = useHomeCountry(homeCountry);
   const { getStateVisitCount } = useStateVisits();
   
@@ -30,22 +36,6 @@ const HeroSummaryCard = memo(({ countries, familyMembers, totalContinents, homeC
     if (!resolvedHome.iso2 || !resolvedHome.hasStateTracking) return 0;
     return getStateVisitCount(resolvedHome.iso2);
   }, [resolvedHome, getStateVisitCount]);
-  
-  // Memoize earliest year calculation
-  const earliestYear = useMemo(() => {
-    return visitDetails.reduce((earliest, visit) => {
-      let year: number | null = null;
-      if (visit.visit_date) {
-        year = new Date(visit.visit_date).getFullYear();
-      } else if (visit.approximate_year) {
-        year = visit.approximate_year;
-      }
-      if (year && (!earliest || year < earliest)) {
-        return year;
-      }
-      return earliest;
-    }, null as number | null);
-  }, [visitDetails]);
 
   const stats = useMemo(() => {
     const baseStats: Array<{
