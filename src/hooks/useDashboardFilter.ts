@@ -4,118 +4,67 @@ import { FamilyMember, Country } from '@/hooks/useFamilyData';
 const STORAGE_KEY = 'dashboard-member-filter';
 
 interface UseDashboardFilterResult {
-  selectedMemberIds: string[];
-  setSelectedMemberIds: (ids: string[]) => void;
-  isAllSelected: boolean;
-  toggleMember: (memberId: string) => void;
-  toggleAll: () => void;
+  selectedMemberId: string | null; // null means "All"
+  setSelectedMemberId: (id: string | null) => void;
   getFilteredCountries: (countries: Country[]) => Country[];
   getFilteredContinents: (countries: Country[]) => number;
-  getFilterSummary: (familyMembers: FamilyMember[]) => string;
+  getFilterLabel: (familyMembers: FamilyMember[]) => string;
 }
 
 export const useDashboardFilter = (familyMembers: FamilyMember[]): UseDashboardFilterResult => {
   const allMemberIds = useMemo(() => familyMembers.map(m => m.id), [familyMembers]);
   
-  // Initialize from localStorage or default to all members
-  const [selectedMemberIds, setSelectedMemberIdsState] = useState<string[]>(() => {
+  // Initialize from localStorage or default to null (All)
+  const [selectedMemberId, setSelectedMemberIdState] = useState<string | null>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as string[];
-        // Validate that stored IDs still exist in family members
-        return parsed;
+      if (stored && stored !== 'null') {
+        return stored;
       }
     } catch {
       // Ignore parsing errors
     }
-    return [];
+    return null;
   });
 
-  // When family members load/change, validate and update selected IDs
+  // When family members load/change, validate selected ID still exists
   useEffect(() => {
     if (allMemberIds.length === 0) return;
     
-    if (selectedMemberIds.length === 0) {
-      // Default to all members if no selection
-      setSelectedMemberIdsState(allMemberIds);
-      return;
+    if (selectedMemberId !== null && !allMemberIds.includes(selectedMemberId)) {
+      // Selected member no longer exists, reset to All
+      setSelectedMemberIdState(null);
     }
-    
-    // Filter out any IDs that no longer exist
-    const validIds = selectedMemberIds.filter(id => allMemberIds.includes(id));
-    
-    if (validIds.length === 0) {
-      // If all stored IDs are invalid, reset to all
-      setSelectedMemberIdsState(allMemberIds);
-    } else if (validIds.length !== selectedMemberIds.length) {
-      // Some IDs were invalid, update with valid ones
-      setSelectedMemberIdsState(validIds);
-    }
-  }, [allMemberIds, selectedMemberIds.length]);
+  }, [allMemberIds, selectedMemberId]);
 
   // Persist to localStorage whenever selection changes
   useEffect(() => {
-    if (selectedMemberIds.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedMemberIds));
-    }
-  }, [selectedMemberIds]);
+    localStorage.setItem(STORAGE_KEY, selectedMemberId || 'null');
+  }, [selectedMemberId]);
 
-  const isAllSelected = useMemo(() => 
-    allMemberIds.length > 0 && selectedMemberIds.length === allMemberIds.length,
-    [allMemberIds, selectedMemberIds]
-  );
-
-  const setSelectedMemberIds = useCallback((ids: string[]) => {
-    // Prevent empty selection - revert to all if trying to clear
-    if (ids.length === 0 && allMemberIds.length > 0) {
-      setSelectedMemberIdsState(allMemberIds);
-    } else {
-      setSelectedMemberIdsState(ids);
-    }
-  }, [allMemberIds]);
-
-  const toggleMember = useCallback((memberId: string) => {
-    setSelectedMemberIdsState(prev => {
-      const newSelection = prev.includes(memberId)
-        ? prev.filter(id => id !== memberId)
-        : [...prev, memberId];
-      
-      // Prevent empty selection
-      if (newSelection.length === 0) {
-        return prev;
-      }
-      return newSelection;
-    });
+  const setSelectedMemberId = useCallback((id: string | null) => {
+    setSelectedMemberIdState(id);
   }, []);
 
-  const toggleAll = useCallback(() => {
-    if (isAllSelected) {
-      // Can't deselect all - keep current selection
-      return;
-    }
-    setSelectedMemberIdsState(allMemberIds);
-  }, [isAllSelected, allMemberIds]);
-
-  // Filter countries based on selected members
+  // Filter countries based on selected member
   const getFilteredCountries = useCallback((countries: Country[]) => {
-    if (isAllSelected || selectedMemberIds.length === 0) {
+    if (selectedMemberId === null) {
+      // "All" selected - return unfiltered
       return countries;
     }
     
-    // Get selected member names
-    const selectedMemberNames = new Set(
-      familyMembers
-        .filter(m => selectedMemberIds.includes(m.id))
-        .map(m => m.name)
-    );
+    // Get selected member name
+    const selectedMember = familyMembers.find(m => m.id === selectedMemberId);
+    if (!selectedMember) return countries;
     
-    // Filter countries to only include visits by selected members
+    const selectedName = selectedMember.name;
+    
+    // Filter countries to only include visits by selected member
     return countries.map(country => ({
       ...country,
-      visitedBy: country.visitedBy.filter(name => selectedMemberNames.has(name))
+      visitedBy: country.visitedBy.filter(name => name === selectedName)
     }));
-  }, [isAllSelected, selectedMemberIds, familyMembers]);
+  }, [selectedMemberId, familyMembers]);
 
   // Calculate continents from filtered countries
   const getFilteredContinents = useCallback((countries: Country[]) => {
@@ -123,31 +72,21 @@ export const useDashboardFilter = (familyMembers: FamilyMember[]): UseDashboardF
     return new Set(filtered.filter(c => c.visitedBy.length > 0).map(c => c.continent)).size;
   }, [getFilteredCountries]);
 
-  // Get human-readable summary of the filter
-  const getFilterSummary = useCallback((members: FamilyMember[]) => {
-    if (isAllSelected || selectedMemberIds.length === 0) {
+  // Get label for the selected filter option
+  const getFilterLabel = useCallback((members: FamilyMember[]) => {
+    if (selectedMemberId === null) {
       return 'All';
     }
     
-    const selectedNames = members
-      .filter(m => selectedMemberIds.includes(m.id))
-      .map(m => m.name.split(' ')[0]);
-    
-    if (selectedNames.length <= 2) {
-      return selectedNames.join(' + ');
-    }
-    
-    return `${selectedNames[0]} + ${selectedNames.length - 1} more`;
-  }, [isAllSelected, selectedMemberIds]);
+    const member = members.find(m => m.id === selectedMemberId);
+    return member?.name.split(' ')[0] || 'All';
+  }, [selectedMemberId]);
 
   return {
-    selectedMemberIds,
-    setSelectedMemberIds,
-    isAllSelected,
-    toggleMember,
-    toggleAll,
+    selectedMemberId,
+    setSelectedMemberId,
     getFilteredCountries,
     getFilteredContinents,
-    getFilterSummary,
+    getFilterLabel,
   };
 };

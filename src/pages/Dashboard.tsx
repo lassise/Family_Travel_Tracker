@@ -40,13 +40,10 @@ const Dashboard = () => {
 
   // Dashboard filter state
   const {
-    selectedMemberIds,
-    isAllSelected,
-    toggleMember,
-    toggleAll,
+    selectedMemberId,
+    setSelectedMemberId,
     getFilteredCountries,
     getFilteredContinents,
-    getFilterSummary,
   } = useDashboardFilter(familyMembers);
 
   useEffect(() => {
@@ -100,12 +97,6 @@ const Dashboard = () => {
     });
   }, []);
 
-  // Get filter summary for display
-  const filterSummary = useMemo(() => 
-    getFilterSummary(familyMembers),
-    [getFilterSummary, familyMembers]
-  );
-
   if (authLoading || tripsLoading || familyLoading) {
     return (
       <AppLayout>
@@ -139,11 +130,8 @@ const Dashboard = () => {
             filterComponent={
               <DashboardMemberFilter
                 familyMembers={familyMembers}
-                selectedMemberIds={selectedMemberIds}
-                onToggleMember={toggleMember}
-                onToggleAll={toggleAll}
-                isAllSelected={isAllSelected}
-                filterSummary={filterSummary}
+                selectedMemberId={selectedMemberId}
+                onSelectMember={setSelectedMemberId}
               />
             }
           />
