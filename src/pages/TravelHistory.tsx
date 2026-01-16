@@ -1,9 +1,12 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useFamilyData, Country } from "@/hooks/useFamilyData";
+import { useFamilyData } from "@/hooks/useFamilyData";
 import { useStateVisits } from "@/hooks/useStateVisits";
 import { useHomeCountry } from "@/hooks/useHomeCountry";
+import { useDashboardFilter } from "@/hooks/useDashboardFilter";
+import { useVisitDetails } from "@/hooks/useVisitDetails";
+import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/layout/AppLayout";
 import CountryTracker from "@/components/CountryTracker";
 import CountryWishlist from "@/components/CountryWishlist";
@@ -20,16 +23,16 @@ import TravelStreaks from "@/components/travel/TravelStreaks";
 import CountryComparison from "@/components/travel/CountryComparison";
 import EnhancedBucketList from "@/components/travel/EnhancedBucketList";
 import TravelMilestones from "@/components/travel/TravelMilestones";
-import FamilyMemberFilter from "@/components/travel/FamilyMemberFilter";
+import DashboardMemberFilter from "@/components/travel/DashboardMemberFilter";
 
-import { Loader2, BarChart3, Globe2, Trophy, Map, Camera, Users, MapPin } from "lucide-react";
+import { Loader2, BarChart3, Globe2, Trophy, Map as MapIcon, Camera, Users, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type TabKey = 'overview' | 'analytics' | 'achievements' | 'countries' | 'memories';
 
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'overview', label: 'Overview', icon: Globe2 },
-  { key: 'countries', label: 'Countries', icon: Map },
+  { key: 'countries', label: 'Countries', icon: MapIcon },
   { key: 'analytics', label: 'Analytics', icon: BarChart3 },
   { key: 'achievements', label: 'Achievements', icon: Trophy },
   { key: 'memories', label: 'Memories', icon: Camera },
@@ -38,24 +41,54 @@ const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
 const TravelHistory = () => {
   const { user, loading: authLoading, needsOnboarding, profile } = useAuth();
   const { familyMembers, countries, wishlist, homeCountry, loading, refetch, totalContinents } = useFamilyData();
+  const { visitDetails } = useVisitDetails();
   const { getStateVisitCount } = useStateVisits();
   const resolvedHome = useHomeCountry(homeCountry);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [visitMemberMap, setVisitMemberMap] = useState<globalThis.Map<string, string[]>>(() => new globalThis.Map());
   
   // Read initial tab from URL or default to 'overview'
   const tabFromUrl = searchParams.get('tab') as TabKey | null;
   const [activeTab, setActiveTab] = useState<TabKey>(
     tabFromUrl && tabs.some(t => t.key === tabFromUrl) ? tabFromUrl : 'overview'
   );
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+
+  // Use the dashboard filter hook
+  const {
+    selectedMemberId,
+    setSelectedMemberId,
+    getFilteredCountries,
+    getFilteredContinents,
+    getFilteredEarliestYear,
+  } = useDashboardFilter(familyMembers);
+
+  // Fetch visit-member mappings for "Since" calculation
+  useEffect(() => {
+    const fetchVisitMembers = async () => {
+      const { data } = await supabase
+        .from('visit_family_members')
+        .select('visit_id, family_member_id');
+      
+      if (data) {
+        const map = new globalThis.Map<string, string[]>();
+        data.forEach(item => {
+          const existing = map.get(item.visit_id) || [];
+          existing.push(item.family_member_id);
+          map.set(item.visit_id, existing);
+        });
+        setVisitMemberMap(map);
+      }
+    };
+    fetchVisitMembers();
+  }, []);
 
   // Reset scroll to top when tab changes and update URL
-  const handleTabChange = (tab: TabKey) => {
+  const handleTabChange = useCallback((tab: TabKey) => {
     setActiveTab(tab);
     setSearchParams(tab === 'overview' ? {} : { tab });
     window.scrollTo({ top: 0, behavior: 'instant' });
-  };
+  }, [setSearchParams]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -65,32 +98,29 @@ const TravelHistory = () => {
     }
   }, [user, authLoading, profile, needsOnboarding, navigate]);
 
-  // Initialize selected members to all when family data loads
-  useEffect(() => {
-    if (familyMembers.length > 0 && selectedMembers.length === 0) {
-      setSelectedMembers(familyMembers.map(m => m.id));
-    }
-  }, [familyMembers, selectedMembers.length]);
+  // Filter countries based on selected family member
+  const filteredCountries = useMemo(() => 
+    getFilteredCountries(countries),
+    [countries, getFilteredCountries]
+  );
 
-  // Filter countries based on selected family members
-  const filteredCountries = useMemo(() => {
-    if (selectedMembers.length === 0) return countries;
-    
-    const selectedMemberNames = familyMembers
-      .filter(m => selectedMembers.includes(m.id))
-      .map(m => m.name);
-    
-    return countries.map(country => ({
-      ...country,
-      visitedBy: country.visitedBy.filter(name => selectedMemberNames.includes(name))
-    }));
-  }, [countries, selectedMembers, familyMembers]);
-
-  // Get filtered family members
+  // Get filtered family members (for display purposes)
   const filteredFamilyMembers = useMemo(() => {
-    if (selectedMembers.length === 0) return familyMembers;
-    return familyMembers.filter(m => selectedMembers.includes(m.id));
-  }, [familyMembers, selectedMembers]);
+    if (selectedMemberId === null) return familyMembers;
+    return familyMembers.filter(m => m.id === selectedMemberId);
+  }, [familyMembers, selectedMemberId]);
+
+  // Calculate filtered continents
+  const filteredContinents = useMemo(() => 
+    getFilteredContinents(countries),
+    [countries, getFilteredContinents]
+  );
+
+  // Calculate filtered earliest year
+  const filteredEarliestYear = useMemo(() => 
+    getFilteredEarliestYear(visitDetails, visitMemberMap),
+    [visitDetails, visitMemberMap, getFilteredEarliestYear]
+  );
 
   if (authLoading) {
     return (
@@ -110,16 +140,10 @@ const TravelHistory = () => {
     c.visitedBy.length > 0 && !resolvedHome.isHomeCountry(c.name)
   ).length;
 
-  // Calculate filtered continents
-  const filteredContinents = new Set(
-    filteredCountries.filter(c => c.visitedBy.length > 0).map(c => c.continent)
-  ).size;
-
   // Get states visited count for home country
-  const statesVisitedCount = useMemo(() => {
-    if (!resolvedHome.iso2 || !resolvedHome.hasStateTracking) return 0;
-    return getStateVisitCount(resolvedHome.iso2);
-  }, [resolvedHome, getStateVisitCount]);
+  const statesVisitedCount = resolvedHome.iso2 && resolvedHome.hasStateTracking 
+    ? getStateVisitCount(resolvedHome.iso2) 
+    : 0;
 
   return (
     <AppLayout>
@@ -149,7 +173,7 @@ const TravelHistory = () => {
                   </div>
                 )}
                 <div className="flex items-center gap-1.5">
-                  <Map className="h-4 w-4 text-secondary" />
+                  <MapIcon className="h-4 w-4 text-secondary" />
                   <span className="font-semibold text-foreground">{filteredContinents}</span>
                   <span className="text-muted-foreground hidden sm:inline">continents</span>
                 </div>
@@ -182,13 +206,14 @@ const TravelHistory = () => {
 
         {/* Tab Content */}
         <div className="container mx-auto px-4 py-6">
-          {/* Family Member Filter */}
+          {/* Family Member Filter - Only show if more than 1 member */}
           {!loading && familyMembers.length > 1 && (
-            <div className="mb-6">
-              <FamilyMemberFilter
+            <div className="mb-6 flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">View stats for:</span>
+              <DashboardMemberFilter
                 familyMembers={familyMembers}
-                selectedMembers={selectedMembers}
-                onSelectionChange={setSelectedMembers}
+                selectedMemberId={selectedMemberId}
+                onSelectMember={setSelectedMemberId}
               />
             </div>
           )}
@@ -211,7 +236,13 @@ const TravelHistory = () => {
             <>
               {activeTab === 'overview' && (
                 <div className="space-y-6">
-                  <HeroSummaryCard countries={filteredCountries} familyMembers={filteredFamilyMembers} totalContinents={filteredContinents} homeCountry={homeCountry} />
+                  <HeroSummaryCard 
+                    countries={filteredCountries} 
+                    familyMembers={filteredFamilyMembers} 
+                    totalContinents={filteredContinents} 
+                    homeCountry={homeCountry}
+                    earliestYear={filteredEarliestYear}
+                  />
                   <InteractiveWorldMap countries={filteredCountries} wishlist={wishlist} homeCountry={homeCountry} onRefetch={refetch} />
                   <TravelMilestones countries={filteredCountries} familyMembers={filteredFamilyMembers} totalContinents={filteredContinents} />
                   <div className="grid lg:grid-cols-2 gap-6">

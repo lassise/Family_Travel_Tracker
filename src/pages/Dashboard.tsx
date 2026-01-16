@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback } from "react";
+import { useEffect, useMemo, useCallback, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
@@ -6,6 +6,8 @@ import { useFamilyData } from "@/hooks/useFamilyData";
 import { useStateVisits } from "@/hooks/useStateVisits";
 import { useHomeCountry } from "@/hooks/useHomeCountry";
 import { useDashboardFilter } from "@/hooks/useDashboardFilter";
+import { useVisitDetails } from "@/hooks/useVisitDetails";
+import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,9 +36,11 @@ const Dashboard = () => {
   const { user, profile, loading: authLoading, needsOnboarding } = useAuth();
   const { trips, loading: tripsLoading } = useTrips();
   const { familyMembers, countries, wishlist, homeCountry, loading: familyLoading, totalContinents, refetch: refetchFamilyData } = useFamilyData();
+  const { visitDetails } = useVisitDetails();
   const { getStateVisitCount } = useStateVisits();
   const resolvedHome = useHomeCountry(homeCountry);
   const navigate = useNavigate();
+  const [visitMemberMap, setVisitMemberMap] = useState<globalThis.Map<string, string[]>>(() => new globalThis.Map());
 
   // Dashboard filter state
   const {
@@ -44,7 +48,28 @@ const Dashboard = () => {
     setSelectedMemberId,
     getFilteredCountries,
     getFilteredContinents,
+    getFilteredEarliestYear,
   } = useDashboardFilter(familyMembers);
+
+  // Fetch visit-member mappings for "Since" calculation
+  useEffect(() => {
+    const fetchVisitMembers = async () => {
+      const { data } = await supabase
+        .from('visit_family_members')
+        .select('visit_id, family_member_id');
+      
+      if (data) {
+        const map = new globalThis.Map<string, string[]>();
+        data.forEach(item => {
+          const existing = map.get(item.visit_id) || [];
+          existing.push(item.family_member_id);
+          map.set(item.visit_id, existing);
+        });
+        setVisitMemberMap(map);
+      }
+    };
+    fetchVisitMembers();
+  }, []);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -75,6 +100,12 @@ const Dashboard = () => {
   const filteredContinents = useMemo(() => 
     getFilteredContinents(countries),
     [countries, getFilteredContinents]
+  );
+
+  // Calculate filtered earliest year
+  const filteredEarliestYear = useMemo(() => 
+    getFilteredEarliestYear(visitDetails, visitMemberMap),
+    [visitDetails, visitMemberMap, getFilteredEarliestYear]
   );
 
   // Count visited countries excluding home country (using filtered data)
@@ -127,6 +158,7 @@ const Dashboard = () => {
             familyMembers={familyMembers} 
             totalContinents={filteredContinents}
             homeCountry={homeCountry}
+            earliestYear={filteredEarliestYear}
             filterComponent={
               <DashboardMemberFilter
                 familyMembers={familyMembers}
