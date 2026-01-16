@@ -234,8 +234,17 @@ async function seedDemoData(client: any, userId: string) {
       }
       await client.from("country_visits").insert(visits);
 
-      // Add some visit details with realistic past dates (not future)
+      // Helper to format date as YYYY-MM-DD
+      const formatDate = (date: Date) => date.toISOString().split('T')[0];
+      
+      // Dynamic dates relative to current date
       const now = new Date();
+      const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+      
+      // Most recent trip: ended 8 days ago (dynamic so streak always shows ~8 days)
+      const recentTripEnd = daysAgo(8);
+      const recentTripStart = daysAgo(18); // 10 day trip
+      
       const visitDetails = [
         {
           user_id: userId,
@@ -261,21 +270,21 @@ async function seedDemoData(client: any, userId: string) {
         },
         {
           user_id: userId,
-          country_id: insertedCountries[3].id, // Italy
-          trip_name: "Rome & Tuscany Summer 2024",
-          visit_date: "2024-07-15",
-          end_date: "2024-07-28",
-          number_of_days: 13,
+          country_id: insertedCountries[3].id, // Italy - DYNAMIC: most recent trip, ended 8 days ago
+          trip_name: "Rome & Tuscany Adventure",
+          visit_date: formatDate(recentTripStart),
+          end_date: formatDate(recentTripEnd),
+          number_of_days: 10,
           highlight: "Colosseum tour with gladiator experience",
           why_it_mattered: "History came alive for the kids",
-          notes: "Best gelato ever!",
+          notes: "Best gelato ever! Just got back from this amazing trip.",
         },
         {
           user_id: userId,
           country_id: insertedCountries[4].id, // Thailand
           trip_name: "Thai Beach Holiday",
-          visit_date: "2024-12-20",
-          end_date: "2025-01-02",
+          visit_date: "2024-02-15",
+          end_date: "2024-02-28",
           number_of_days: 13,
           highlight: "Swimming with elephants at ethical sanctuary",
           notes: "Beautiful beaches and amazing food",
@@ -346,14 +355,19 @@ async function seedDemoData(client: any, userId: string) {
       );
     }
 
-    // Add sample trips - one past, one current, one near future, one far future
+    // Dynamic dates for trips - always relative to current date
+    const now = new Date();
+    const daysFromNow = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+    
+    // Add sample trips - one 1 month away, one 1 year away
     const trips = [
       {
         user_id: userId,
         title: "Greece Island Hopping",
         destination: "Athens & Santorini, Greece",
-        start_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 year from now
-        end_date: new Date(Date.now() + 375 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        start_date: formatDate(daysFromNow(365)), // 1 year from now
+        end_date: formatDate(daysFromNow(375)),
         status: "planning",
         trip_type: "family",
         budget_total: 8000,
@@ -366,19 +380,19 @@ async function seedDemoData(client: any, userId: string) {
       },
       {
         user_id: userId,
-        title: "Summer in Barcelona",
-        destination: "Barcelona, Spain",
-        start_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-        end_date: new Date(Date.now() + 37 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        status: "planning",
+        title: "Portugal Coast Adventure",
+        destination: "Lisbon & Algarve, Portugal",
+        start_date: formatDate(daysFromNow(30)), // 1 month from now
+        end_date: formatDate(daysFromNow(38)),
+        status: "upcoming",
         trip_type: "family",
-        budget_total: 5000,
+        budget_total: 5500,
         currency: "USD",
-        interests: ["beaches", "culture", "food"],
+        interests: ["beaches", "culture", "food", "surfing"],
         kids_ages: [8, 12],
         pace_preference: "relaxed",
-        notes: "Looking forward to exploring the city and beaches!",
-        cover_image: "https://images.unsplash.com/photo-1583422409516-2895a77efced?w=800",
+        notes: "Excited to explore the Portuguese coast! Flights booked.",
+        cover_image: "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=800",
       },
     ];
     
