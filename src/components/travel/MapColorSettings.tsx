@@ -24,7 +24,6 @@ const colorPresets = [
   { label: 'Pink', value: 'hsl(340, 75%, 55%)' },
   { label: 'Teal', value: 'hsl(175, 70%, 40%)' },
   { label: 'Yellow', value: 'hsl(45, 90%, 50%)' },
-  { label: 'Red', value: 'hsl(0, 70%, 55%)' },
 ];
 
 interface MapColorSettingsProps {
