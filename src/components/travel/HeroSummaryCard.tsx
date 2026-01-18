@@ -1,9 +1,10 @@
 import { useMemo, memo, ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Globe2, Users, Plane, Calendar, MapPin } from "lucide-react";
+import { Globe2, Users, Plane, Calendar } from "lucide-react";
 import { Country, FamilyMember } from "@/hooks/useFamilyData";
 import { useHomeCountry } from "@/hooks/useHomeCountry";
 import { useStateVisits } from "@/hooks/useStateVisits";
+import CountryFlag from "@/components/common/CountryFlag";
 
 interface HeroSummaryCardProps {
   countries: Country[];
@@ -39,11 +40,12 @@ const HeroSummaryCard = memo(({
 
   const stats = useMemo(() => {
     const baseStats: Array<{
-      icon: typeof Globe2;
+      icon: typeof Globe2 | null;
       value: number | string;
       label: string;
       color: string;
       bgColor: string;
+      flagCode?: string;
     }> = [
       {
         icon: Globe2,
@@ -54,14 +56,15 @@ const HeroSummaryCard = memo(({
       },
     ];
 
-    // Add states visited if home country supports it
+    // Add states visited if home country supports it - use home country flag as icon
     if (resolvedHome.hasStateTracking && statesVisitedCount > 0) {
       baseStats.push({
-        icon: MapPin,
+        icon: null, // Will use flag instead
         value: statesVisitedCount,
         label: "States",
         color: "text-accent",
         bgColor: "bg-accent/10",
+        flagCode: resolvedHome.iso2,
       });
     }
 
@@ -126,7 +129,11 @@ const HeroSummaryCard = memo(({
                 className="flex flex-col items-center text-center p-3 rounded-xl bg-background/60 backdrop-blur-sm"
               >
                 <div className={`p-2 rounded-full ${stat.bgColor} mb-2`}>
-                  <Icon className={`h-5 w-5 ${stat.color}`} />
+                  {stat.flagCode ? (
+                    <CountryFlag countryCode={stat.flagCode} countryName="Home" size="sm" />
+                  ) : Icon ? (
+                    <Icon className={`h-5 w-5 ${stat.color}`} />
+                  ) : null}
                 </div>
                 <span className="text-2xl font-bold text-foreground">
                   {stat.value}

@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { FamilyMember } from '@/hooks/useFamilyData';
 import { useVisitDetails } from '@/hooks/useVisitDetails';
-import { Globe, Map, Users, Calendar, Plane, Trophy } from 'lucide-react';
+import { Globe, Users, Calendar, Plane, Trophy } from 'lucide-react';
 
 interface QuickStatsDashboardProps {
   totalCountries: number;
@@ -29,7 +29,7 @@ const QuickStatsDashboard = ({ totalCountries, totalContinents, familyMembers }:
       gradient: 'from-primary to-primary/60',
     },
     {
-      icon: Map,
+      icon: Plane,
       value: totalContinents,
       label: 'Continents',
       sublabel: 'of 7',
