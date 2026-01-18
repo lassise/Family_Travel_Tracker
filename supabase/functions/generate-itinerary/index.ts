@@ -631,6 +631,35 @@ ${hasKids ? '- Include family activities during leisure time' : ''}`;
 - Group activities by proximity`;
   }
 
+  // Accessibility requirements
+  if (tripDetails.needsWheelchairAccess) {
+    systemPrompt += `\n\nWHEELCHAIR ACCESSIBILITY REQUIRED:
+- ONLY suggest wheelchair-accessible activities and venues
+- For each activity, set "isWheelchairAccessible": true/false
+- Include detailed "accessibilityNotes" (elevators, ramps, terrain type, step-free access)
+- Note if reservations needed for accessible entrance
+- Avoid cobblestone areas, stairs without alternatives`;
+  }
+
+  if (tripDetails.hasStroller) {
+    systemPrompt += `\n\nSTROLLER TRAVELING:
+- Prioritize stroller-friendly venues and paths
+- For each activity, set "isStrollerFriendly": true/false
+- Include detailed "strollerNotes" (terrain, stairs, elevator access, storage, bumpy surfaces)
+- Note if stroller should be left at entrance
+- Recommend transit options that accommodate strollers`;
+  }
+
+  // Distance and transit requirements
+  systemPrompt += `\n\nDISTANCE AND TRANSIT REQUIREMENTS:
+For EVERY activity, include:
+- "distanceFromPrevious": distance in km from the previous activity (or from lodging for first activity)
+- "distanceUnit": always "km"
+- "travelTimeMinutes": estimated travel time in minutes
+- "recommendedTransitMode": best way to get there ("walk", "taxi", "metro", "bus", "train", "rideshare")
+- "transitDetails": specific instructions like "Take Metro Line A to Termini, then walk 5 min"
+- "latitude" and "longitude": approximate coordinates for the venue`;
+
   if (profilePrefs) {
     systemPrompt += `\n\nProfile preferences:`;
     if (profilePrefs.pace) systemPrompt += `\n- Pace: ${profilePrefs.pace}`;
@@ -682,7 +711,9 @@ ${hasKids ? `- Kids' ages: ${tripDetails.kidsAges.join(', ')}` : '- Adults only'
 - Budget: ${safeBudget}
 ${safeLodging ? `- Staying near: ${safeLodging}` : ''}
 ${hasKids && safeNapSchedule ? `- Nap schedule: ${safeNapSchedule}` : ''}
-${hasKids && tripDetails.strollerNeeds ? '- Need stroller-friendly options' : ''}`;
+${hasKids && tripDetails.strollerNeeds ? '- Need stroller-friendly options' : ''}
+${tripDetails.needsWheelchairAccess ? '- ♿ WHEELCHAIR ACCESSIBILITY REQUIRED for all venues' : ''}
+${tripDetails.hasStroller ? '- 🚼 TRAVELING WITH STROLLER - need stroller-friendly routes and venues' : ''}`;
 
   if (safeExtraContext) {
     userPrompt += `
@@ -768,6 +799,8 @@ Return this exact JSON structure:
           "description": "What you'll experience",
           "locationName": "Place name",
           "locationAddress": "Full address",
+          "latitude": 41.8902,
+          "longitude": 12.4922,
           "category": "${isBusiness ? 'meeting|restaurant|transport|networking|rest' : 'attraction|restaurant|outdoor|museum|entertainment|transport'}",
           "durationMinutes": 90,
           "costEstimate": 50,
@@ -779,15 +812,20 @@ Return this exact JSON structure:
           "bestTimeToVisit": "Morning before 10am - fewer crowds",
           "crowdLevel": "low|moderate|high|peak",
           "seasonalNotes": "Peak season in July - expect longer queues",
-          "transitMode": "walk|taxi|metro|bus|train",
+          "distanceFromPrevious": 1.5,
+          "distanceUnit": "km",
+          "travelTimeMinutes": 15,
+          "recommendedTransitMode": "walk|taxi|metro|bus|train|rideshare",
+          "transitDetails": "Take Metro Line A to Colosseo station, exit and walk 2 min",
+          ${tripDetails.needsWheelchairAccess ? `"isWheelchairAccessible": true,
+          "accessibilityNotes": "Elevator available at entrance, ramps throughout, step-free access",` : ''}
+          ${tripDetails.hasStroller ? `"isStrollerFriendly": true,
+          "strollerNotes": "Flat terrain, stroller storage available, elevator access",` : ''}
           ${hasTrainTravel ? `"transportBookingUrl": "https://...",
           "transportStationNotes": "Take the Metro Line 1 from hotel",` : ''}
-          ${hasKids ? `"isKidFriendly": true,
-          "isStrollerFriendly": true,
-          "strollerNotes": "Stroller info",` : ''}
+          ${hasKids ? `"isKidFriendly": true,` : ''}
           "requiresReservation": false,
-          "reservationInfo": "How to book",
-          "accessibilityTags": ["wheelchair", "stroller-friendly"]
+          "reservationInfo": "How to book"
         }
       ],
       "mealSuggestions": [
