@@ -35,10 +35,17 @@ const DEPARTURE_TIMES = [
 ];
 
 const CABIN_CLASSES = [
+  { value: "any", label: "Any Class" },
   { value: "economy", label: "Economy" },
   { value: "premium_economy", label: "Premium Economy" },
   { value: "business", label: "Business" },
   { value: "first", label: "First Class" },
+];
+
+const STOPS_OPTIONS = [
+  { value: "nonstop", label: "Nonstop only" },
+  { value: "1_or_fewer", label: "1 stop or fewer" },
+  { value: "2_or_fewer", label: "2 stops or fewer" },
 ];
 
 const SEAT_OPTIONS = [
@@ -102,6 +109,15 @@ const Flights = () => {
   // Premium seat type preferences for business/first class
   const [premiumSeatTypes, setPremiumSeatTypes] = useState<string[]>([]);
   
+  // Stops filter
+  const [stopsFilter, setStopsFilter] = useState<string>("1_or_fewer");
+  
+  // Compare all cabins toggle
+  const [compareAllCabins, setCompareAllCabins] = useState(false);
+  
+  // Cabin class - local state to support "any" option
+  const [cabinClass, setCabinClass] = useState<string>("economy");
+  
   // Price alert dialog
   const [priceAlertOpen, setPriceAlertOpen] = useState(false);
 
@@ -164,7 +180,10 @@ const Flights = () => {
     // Could save to preferences in future - for now local state
   };
   
-  const isPremiumCabin = preferences.cabin_class === "business" || preferences.cabin_class === "first";
+  const isPremiumCabin = cabinClass === "business" || cabinClass === "first";
+  
+  // Cabin class for search - use any as null for API
+  const effectiveCabinClass = cabinClass === "any" ? null : cabinClass;
 
   const searchFlights = async () => {
     if (!origin || !destination || !departDate) {
@@ -193,8 +212,10 @@ const Flights = () => {
           returnDate: tripType === "roundtrip" ? returnDate : null,
           passengers,
           tripType,
-          cabinClass: preferences.cabin_class,
+          cabinClass: effectiveCabinClass,
           alternateAirports: preferences.alternate_airports,
+          stopsFilter,
+          compareAllCabins: compareAllCabins && cabinClass === "any",
         },
       });
 
@@ -648,14 +669,14 @@ const Flights = () => {
               </div>
             </div>
 
-            {/* Cabin Class */}
-            <div className="space-y-3">
+            {/* Cabin Class & Stops Filter */}
+            <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <Label>Cabin</Label>
                 <Select 
-                  value={preferences.cabin_class} 
+                  value={cabinClass} 
                   onValueChange={(v) => {
-                    updatePreferences({ cabin_class: v as typeof preferences.cabin_class });
+                    setCabinClass(v);
                     // Clear premium seat types if switching away from business/first
                     if (v !== "business" && v !== "first") {
                       setPremiumSeatTypes([]);
@@ -670,6 +691,26 @@ const Flights = () => {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label>Stops</Label>
+                <Select value={stopsFilter} onValueChange={setStopsFilter}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {STOPS_OPTIONS.map(s => (
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            {/* Compare All Cabins Toggle - only when Any Class selected */}
+            {cabinClass === "any" && (
+              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
+                <Switch checked={compareAllCabins} onCheckedChange={setCompareAllCabins} />
+                <Label className="text-sm">Show all cabin classes (compare prices)</Label>
+              </div>
+            )}
               
               {/* Premium Seat Type Quick Select - Shows when Business/First selected */}
               {isPremiumCabin && (
@@ -713,7 +754,6 @@ const Flights = () => {
                   )}
                 </div>
               )}
-            </div>
 
             {/* Quick Filters */}
             <div className="flex flex-wrap gap-4 pt-2 border-t">
@@ -749,6 +789,14 @@ const Flights = () => {
                 <Label className="text-sm flex items-center gap-1">
                   <Armchair className="h-3 w-3" /> Need window (car seat)
                 </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>Many flights require an infant in a car seat to sit by a window.</p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
 

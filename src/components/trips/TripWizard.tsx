@@ -12,6 +12,9 @@ import { KidsStep } from "./wizard/KidsStep";
 import { InterestsStep } from "./wizard/InterestsStep";
 import { PreferencesStep } from "./wizard/PreferencesStep";
 import { ReviewStep } from "./wizard/ReviewStep";
+import { PlannerModeStep, type ClientInfo } from "./wizard/PlannerModeStep";
+import { ContextStep } from "./wizard/ContextStep";
+import { useTravelProfiles } from "@/hooks/useTravelProfiles";
 
 export interface TripFormData {
   title: string;
@@ -29,19 +32,26 @@ export interface TripFormData {
   napSchedule: string;
   strollerNeeds: boolean;
   tripPurpose: string; // "leisure" | "business" | "mixed"
+  // New fields for planner mode
+  plannerMode: 'personal' | 'planner';
+  clientInfo: ClientInfo;
+  extraContext: string;
 }
 
 const STEPS = [
-  { id: 1, title: "Basics", description: "Where & when" },
-  { id: 2, title: "Kids", description: "Ages & needs" },
-  { id: 3, title: "Interests", description: "What you love" },
-  { id: 4, title: "Preferences", description: "Your style" },
-  { id: 5, title: "Generate", description: "Create itinerary" },
+  { id: 1, title: "Mode", description: "Who's this for?" },
+  { id: 2, title: "Basics", description: "Where & when" },
+  { id: 3, title: "Kids", description: "Ages & needs" },
+  { id: 4, title: "Interests", description: "What you love" },
+  { id: 5, title: "Preferences", description: "Your style" },
+  { id: 6, title: "Context", description: "Extra details" },
+  { id: 7, title: "Generate", description: "Create itinerary" },
 ];
 
 const TripWizard = () => {
   const navigate = useNavigate();
   const { createTrip } = useTrips();
+  const { profiles, activeProfile } = useTravelProfiles();
   const [currentStep, setCurrentStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   
@@ -61,6 +71,17 @@ const TripWizard = () => {
     napSchedule: "",
     strollerNeeds: false,
     tripPurpose: "leisure",
+    // New fields
+    plannerMode: 'personal',
+    clientInfo: {
+      numAdults: 2,
+      numKids: 0,
+      kidsAges: [],
+      homeAirport: '',
+      budgetRange: 'moderate',
+      profileId: null,
+    },
+    extraContext: "",
   });
 
   const updateFormData = (updates: Partial<TripFormData>) => {
@@ -72,18 +93,24 @@ const TripWizard = () => {
   const canProceed = () => {
     switch (currentStep) {
       case 1:
+        // Mode step - always can proceed
+        return true;
+      case 2:
         // Destination required, dates only if they said they have them
         if (!formData.destination) return false;
         if (formData.hasDates && (!formData.startDate || !formData.endDate)) return false;
         return true;
-      case 2:
+      case 3:
         // Kids ages only required if traveling with kids
         if (formData.travelingWithKids && formData.kidsAges.length === 0) return false;
         return true;
-      case 3:
-        return formData.interests.length > 0;
       case 4:
+        return formData.interests.length > 0;
+      case 5:
         return formData.pacePreference && formData.budgetLevel;
+      case 6:
+        // Context step is optional
+        return true;
       default:
         return true;
     }
@@ -108,13 +135,27 @@ const TripWizard = () => {
       // Generate title if not provided
       const tripTitle = formData.title || `${formData.destination} Family Trip`;
       
+      // Determine kids ages based on mode
+      const effectiveKidsAges = formData.plannerMode === 'planner' 
+        ? formData.clientInfo.kidsAges 
+        : formData.kidsAges;
+      
+      const effectiveBudget = formData.plannerMode === 'planner'
+        ? formData.clientInfo.budgetRange
+        : formData.budgetLevel;
+      
+      // Get active profile preferences if available
+      const selectedProfile = formData.plannerMode === 'planner' && formData.clientInfo.profileId
+        ? profiles.find(p => p.id === formData.clientInfo.profileId)
+        : activeProfile;
+      
       // First create the trip in the database
       const { data: trip, error: tripError } = await createTrip({
         title: tripTitle,
         destination: formData.destination,
         start_date: formData.startDate,
         end_date: formData.endDate,
-        kids_ages: formData.kidsAges,
+        kids_ages: effectiveKidsAges,
         interests: formData.interests,
         pace_preference: formData.pacePreference,
         status: 'planning',
@@ -126,21 +167,33 @@ const TripWizard = () => {
 
       toast.info("Generating your personalized itinerary...");
 
-      // Call the edge function to generate itinerary
+      // Call the edge function to generate itinerary with enhanced data
       const { data: itineraryData, error: itineraryError } = await supabase.functions.invoke('generate-itinerary', {
         body: {
           destination: formData.destination,
           startDate: formData.startDate,
           endDate: formData.endDate,
-          kidsAges: formData.travelingWithKids ? formData.kidsAges : [],
+          kidsAges: formData.travelingWithKids ? effectiveKidsAges : [],
           interests: formData.interests,
-          pacePreference: formData.pacePreference,
-          budgetLevel: formData.budgetLevel,
+          pacePreference: selectedProfile?.pace || formData.pacePreference,
+          budgetLevel: effectiveBudget,
           lodgingLocation: formData.lodgingLocation,
           napSchedule: formData.travelingWithKids ? formData.napSchedule : "",
           strollerNeeds: formData.travelingWithKids ? formData.strollerNeeds : false,
           tripPurpose: formData.tripPurpose,
-          hasKids: formData.travelingWithKids && formData.kidsAges.length > 0,
+          hasKids: (formData.travelingWithKids && effectiveKidsAges.length > 0) || 
+                   (formData.plannerMode === 'planner' && formData.clientInfo.numKids > 0),
+          // New fields
+          plannerMode: formData.plannerMode,
+          extraContext: formData.extraContext,
+          clientInfo: formData.plannerMode === 'planner' ? formData.clientInfo : null,
+          profilePreferences: selectedProfile ? {
+            pace: selectedProfile.pace,
+            budgetLevel: selectedProfile.budget_level,
+            kidFriendlyPriority: selectedProfile.kid_friendly_priority,
+            preferNonstop: selectedProfile.prefer_nonstop,
+            maxStops: selectedProfile.max_stops,
+          } : null,
         },
       });
 
@@ -221,14 +274,30 @@ const TripWizard = () => {
   const renderStep = () => {
     switch (currentStep) {
       case 1:
-        return <TripBasicsStep formData={formData} updateFormData={updateFormData} />;
+        return (
+          <PlannerModeStep 
+            mode={formData.plannerMode}
+            clientInfo={formData.clientInfo}
+            onModeChange={(mode) => updateFormData({ plannerMode: mode })}
+            onClientInfoChange={(clientInfo) => updateFormData({ clientInfo })}
+          />
+        );
       case 2:
-        return <KidsStep formData={formData} updateFormData={updateFormData} />;
+        return <TripBasicsStep formData={formData} updateFormData={updateFormData} />;
       case 3:
-        return <InterestsStep formData={formData} updateFormData={updateFormData} />;
+        return <KidsStep formData={formData} updateFormData={updateFormData} />;
       case 4:
-        return <PreferencesStep formData={formData} updateFormData={updateFormData} />;
+        return <InterestsStep formData={formData} updateFormData={updateFormData} />;
       case 5:
+        return <PreferencesStep formData={formData} updateFormData={updateFormData} />;
+      case 6:
+        return (
+          <ContextStep 
+            extraContext={formData.extraContext}
+            onChange={(value) => updateFormData({ extraContext: value })}
+          />
+        );
+      case 7:
         return <ReviewStep formData={formData} />;
       default:
         return null;
