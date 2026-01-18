@@ -8,10 +8,10 @@ const corsHeaders = {
 };
 
 // Rate limiting configuration
-const RATE_LIMIT_MAX_REQUESTS = 10; // 10 requests per hour
-const RATE_LIMIT_WINDOW_MINUTES = 60; // 1 hour window
+const RATE_LIMIT_MAX_REQUESTS = 10;
+const RATE_LIMIT_WINDOW_MINUTES = 60;
 
-// Input validation schema
+// Input validation schema - extended for new fields
 const TripDetailsSchema = z.object({
   destination: z.string().trim().min(1, "Destination is required").max(100, "Destination too long"),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format (YYYY-MM-DD)"),
@@ -25,11 +25,28 @@ const TripDetailsSchema = z.object({
   strollerNeeds: z.boolean().optional(),
   tripPurpose: z.enum(["leisure", "business", "mixed"]).optional().default("leisure"),
   hasKids: z.boolean().optional().default(false),
+  // New fields
+  plannerMode: z.enum(["personal", "planner"]).optional().default("personal"),
+  extraContext: z.string().trim().max(2000).optional(),
+  clientInfo: z.object({
+    numAdults: z.number().int().min(1).max(20),
+    numKids: z.number().int().min(0).max(15),
+    kidsAges: z.array(z.number().int().min(0).max(18)),
+    homeAirport: z.string().max(10),
+    budgetRange: z.enum(["budget", "moderate", "luxury"]),
+    profileId: z.string().nullable(),
+  }).nullable().optional(),
+  profilePreferences: z.object({
+    pace: z.string().optional(),
+    budgetLevel: z.string().optional(),
+    kidFriendlyPriority: z.string().optional(),
+    preferNonstop: z.boolean().optional(),
+    maxStops: z.number().optional(),
+  }).nullable().optional(),
 });
 
 type TripDetails = z.infer<typeof TripDetailsSchema>;
 
-// Rate limit record type
 interface RateLimitRecord {
   id: string;
   user_id: string;
@@ -39,16 +56,14 @@ interface RateLimitRecord {
   created_at: string;
 }
 
-// Sanitize text for safe prompt injection prevention
 const sanitizeForPrompt = (text: string): string => {
   return text
     .replace(/[\n\r]/g, ' ')
     .replace(/[<>]/g, '')
-    .substring(0, 200)
+    .substring(0, 500)
     .trim();
 };
 
-// Check rate limit for user
 const checkRateLimit = async (
   supabase: SupabaseClient,
   userId: string,
@@ -59,7 +74,6 @@ const checkRateLimit = async (
   const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000);
   
   try {
-    // Check for existing rate limit record
     const { data, error } = await supabase
       .from('api_rate_limits')
       .select('*')
@@ -69,14 +83,12 @@ const checkRateLimit = async (
 
     if (error && error.code !== 'PGRST116') {
       console.error('Rate limit check error:', error.message);
-      // Allow request on error to prevent blocking users
       return { allowed: true };
     }
     
     const record = data as RateLimitRecord | null;
     
     if (!record) {
-      // First request - create new record
       await supabase.from('api_rate_limits').insert({
         user_id: userId,
         function_name: functionName,
@@ -86,10 +98,8 @@ const checkRateLimit = async (
       return { allowed: true, remaining: maxRequests - 1 };
     }
     
-    // Check if window has expired
     const recordWindowStart = new Date(record.window_start);
     if (recordWindowStart < windowStart) {
-      // Window expired - reset counter
       await supabase
         .from('api_rate_limits')
         .update({ 
@@ -100,7 +110,6 @@ const checkRateLimit = async (
       return { allowed: true, remaining: maxRequests - 1 };
     }
     
-    // Check if limit exceeded
     if (record.request_count >= maxRequests) {
       const resetTime = new Date(record.window_start).getTime() + windowMinutes * 60 * 1000;
       const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
@@ -108,7 +117,6 @@ const checkRateLimit = async (
       return { allowed: false, retryAfter, remaining: 0 };
     }
     
-    // Increment counter
     await supabase
       .from('api_rate_limits')
       .update({ request_count: record.request_count + 1 } as Partial<RateLimitRecord>)
@@ -117,7 +125,6 @@ const checkRateLimit = async (
     return { allowed: true, remaining: maxRequests - record.request_count - 1 };
   } catch (err) {
     console.error('Rate limit error:', err);
-    // Allow request on error
     return { allowed: true };
   }
 };
@@ -128,7 +135,6 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authentication
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.log('Request rejected: No authorization header');
@@ -138,13 +144,11 @@ serve(async (req) => {
       });
     }
 
-    // Create Supabase client with service role for rate limiting
     const serviceClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Create Supabase client to verify JWT
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -166,7 +170,6 @@ serve(async (req) => {
 
     console.log('Authenticated user:', user.id);
 
-    // Check rate limit
     const rateLimit = await checkRateLimit(
       serviceClient, 
       user.id, 
@@ -189,7 +192,6 @@ serve(async (req) => {
       });
     }
 
-    // Parse and validate input
     const rawDetails = await req.json();
     const validationResult = TripDetailsSchema.safeParse(rawDetails);
     
@@ -211,7 +213,6 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Validate date order
     const startDate = new Date(tripDetails.startDate);
     const endDate = new Date(tripDetails.endDate);
     
@@ -231,14 +232,27 @@ serve(async (req) => {
       });
     }
 
-    // Build system prompt based on trip purpose
+    // Build system prompt based on trip purpose and planner mode
     const isBusiness = tripDetails.tripPurpose === "business";
     const isMixed = tripDetails.tripPurpose === "mixed";
     const hasKids = tripDetails.hasKids || tripDetails.kidsAges.length > 0;
+    const isPlannerMode = tripDetails.plannerMode === "planner";
+    const clientInfo = tripDetails.clientInfo;
+    const profilePrefs = tripDetails.profilePreferences;
 
     let systemPrompt = `You are an expert travel planner creating detailed, practical itineraries.`;
     
-    if (isBusiness) {
+    if (isPlannerMode && clientInfo) {
+      systemPrompt = `You are an expert travel planner helping a travel professional plan trips for their clients. You create detailed, personalized itineraries based on client requirements.
+
+Key focus areas:
+- Create itineraries suitable for ${clientInfo.numAdults} adult(s)${clientInfo.numKids > 0 ? ` and ${clientInfo.numKids} child(ren)` : ''}
+- Budget level: ${clientInfo.budgetRange}
+${clientInfo.kidsAges.length > 0 ? `- Kids' ages: ${clientInfo.kidsAges.join(', ')} years old` : ''}
+${clientInfo.homeAirport ? `- Traveling from: ${clientInfo.homeAirport}` : ''}
+${profilePrefs?.pace ? `- Pace preference: ${profilePrefs.pace}` : ''}
+${profilePrefs?.kidFriendlyPriority === 'high' ? '- High priority on kid-friendly activities' : ''}`;
+    } else if (isBusiness) {
       systemPrompt = `You are an expert business travel planner. You create efficient itineraries that maximize productivity while allowing for networking opportunities and local experiences.
 
 Your itineraries should:
@@ -250,7 +264,7 @@ Your itineraries should:
 - Note which venues have good WiFi and workspaces
 - Include backup options for cancelled meetings`;
     } else if (isMixed) {
-      systemPrompt = `You are an expert travel planner specializing in "bleisure" trips that combine business and leisure. You create balanced itineraries that accommodate work commitments while maximizing leisure time.
+      systemPrompt = `You are an expert travel planner specializing in "bleisure" trips that combine business and leisure.
 
 Your itineraries should:
 - Clearly separate business and leisure activities
@@ -261,7 +275,7 @@ ${hasKids ? `- Account for kid-friendly activities during leisure time
 - Suggest efficient transitions between work and personal time
 - Note venues with good WiFi for impromptu work needs`;
     } else if (hasKids) {
-      systemPrompt = `You are an expert family travel planner specializing in trips with children. You create detailed, practical itineraries that account for kids' needs, energy levels, and attention spans.
+      systemPrompt = `You are an expert family travel planner specializing in trips with children.
 
 Your itineraries should:
 - Be realistic about timing and travel between locations
@@ -284,20 +298,29 @@ Your itineraries should:
 - Suggest nightlife and evening entertainment options where relevant`;
     }
 
-    // Sanitize user inputs before including in prompt
+    // Apply profile preferences to system prompt
+    if (profilePrefs) {
+      systemPrompt += `\n\nAdditional preferences from saved profile:`;
+      if (profilePrefs.pace) systemPrompt += `\n- Trip pace: ${profilePrefs.pace}`;
+      if (profilePrefs.budgetLevel) systemPrompt += `\n- Budget: ${profilePrefs.budgetLevel}`;
+      if (profilePrefs.kidFriendlyPriority) systemPrompt += `\n- Kid-friendly priority: ${profilePrefs.kidFriendlyPriority}`;
+    }
+
+    // Sanitize user inputs
     const safeDestination = sanitizeForPrompt(tripDetails.destination);
     const safeInterests = tripDetails.interests.map(i => sanitizeForPrompt(i)).join(', ');
     const safePace = sanitizeForPrompt(tripDetails.pacePreference);
     const safeBudget = sanitizeForPrompt(tripDetails.budgetLevel);
     const safeLodging = tripDetails.lodgingLocation ? sanitizeForPrompt(tripDetails.lodgingLocation) : '';
     const safeNapSchedule = tripDetails.napSchedule ? sanitizeForPrompt(tripDetails.napSchedule) : '';
+    const safeExtraContext = tripDetails.extraContext ? sanitizeForPrompt(tripDetails.extraContext) : '';
 
     // Parse custom interests
     const customInterests = tripDetails.interests.filter(i => i.startsWith("custom:")).map(i => i.replace("custom:", ""));
     const standardInterests = tripDetails.interests.filter(i => !i.startsWith("custom:"));
     const allInterests = [...standardInterests, ...customInterests];
 
-    const userPrompt = `Create a ${tripDays}-day ${isBusiness ? 'business' : isMixed ? 'bleisure' : 'travel'} itinerary for ${safeDestination}.
+    let userPrompt = `Create a ${tripDays}-day ${isBusiness ? 'business' : isMixed ? 'bleisure' : 'travel'} itinerary for ${safeDestination}.
 
 Trip Details:
 - Dates: ${tripDetails.startDate} to ${tripDetails.endDate}
@@ -308,7 +331,30 @@ ${hasKids ? `- Kids' ages: ${tripDetails.kidsAges.join(', ')} years old` : '- Ad
 - Budget level: ${safeBudget}
 ${safeLodging ? `- Staying near: ${safeLodging}` : ''}
 ${hasKids && safeNapSchedule ? `- Nap schedule: ${safeNapSchedule}` : ''}
-${hasKids && tripDetails.strollerNeeds ? '- Need stroller-friendly options' : ''}
+${hasKids && tripDetails.strollerNeeds ? '- Need stroller-friendly options' : ''}`;
+
+    // Add extra context if provided
+    if (safeExtraContext) {
+      userPrompt += `
+
+IMPORTANT EXTRA CONTEXT FROM USER:
+${safeExtraContext}
+
+Please incorporate the above context into your planning. This represents specific needs, preferences, or constraints that should be reflected throughout the itinerary.`;
+    }
+
+    // Add planner mode client info
+    if (isPlannerMode && clientInfo) {
+      userPrompt += `
+
+This itinerary is being created by a travel planner for their client:
+- Party size: ${clientInfo.numAdults} adult(s), ${clientInfo.numKids} child(ren)
+${clientInfo.kidsAges.length > 0 ? `- Children's ages: ${clientInfo.kidsAges.join(', ')}` : ''}
+- Budget range: ${clientInfo.budgetRange}
+${clientInfo.homeAirport ? `- Departing from: ${clientInfo.homeAirport}` : ''}`;
+    }
+
+    userPrompt += `
 
 ${isBusiness ? 'Focus on professional venues, efficient scheduling, and business-appropriate activities.' : ''}
 ${isMixed ? 'Balance business commitments with leisure activities. Mark which activities are business vs personal.' : ''}
@@ -358,7 +404,7 @@ Please generate a detailed day-by-day itinerary in the following JSON format:
   "generalTips": ["Overall trip tips${hasKids ? ' for families' : ''}"]
 }
 
-Ensure all times are realistic and include buffer time for transitions. Return ONLY valid JSON, no additional text.`;
+Ensure all times are realistic and include buffer time for transitions. Return ONLY valid JSON, no additional text or markdown formatting.`;
 
     console.log('Generating itinerary for:', safeDestination, 'by user:', user.id);
 
@@ -404,14 +450,26 @@ Ensure all times are realistic and include buffer time for transitions. Return O
       throw new Error('No content in AI response');
     }
 
-    // Parse the JSON from the response
+    // Parse the JSON from the response - improved parsing
     let itinerary;
     try {
       // Remove any markdown code blocks if present
-      const cleanedContent = content.replace(/```json\n?|\n?```/g, '').trim();
+      let cleanedContent = content
+        .replace(/```json\s*/gi, '')
+        .replace(/```\s*/g, '')
+        .trim();
+      
+      // Find the JSON object boundaries
+      const jsonStart = cleanedContent.indexOf('{');
+      const jsonEnd = cleanedContent.lastIndexOf('}');
+      
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        cleanedContent = cleanedContent.substring(jsonStart, jsonEnd + 1);
+      }
+      
       itinerary = JSON.parse(cleanedContent);
     } catch (parseError) {
-      console.error('Failed to parse itinerary JSON:', content);
+      console.error('Failed to parse itinerary JSON:', content.substring(0, 500) + '...');
       throw new Error('Failed to parse itinerary response');
     }
 
