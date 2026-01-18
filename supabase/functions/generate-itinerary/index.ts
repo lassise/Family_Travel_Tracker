@@ -18,6 +18,34 @@ const INITIAL_BACKOFF_MS = 1000;
 // Generate a request ID for tracing
 const generateRequestId = () => crypto.randomUUID().substring(0, 8);
 
+// Italy station data for multi-station warnings
+const ITALY_MULTI_STATION_CITIES: Record<string, { stations: string[]; guidance: string }> = {
+  'milan': {
+    stations: ['Milano Centrale', 'Milano Porta Garibaldi', 'Milano Rogoredo', 'Milano Cadorna'],
+    guidance: 'Milano Centrale is the main hub for high-speed trains. Porta Garibaldi is closer to the city center and serves some high-speed routes. Rogoredo is convenient if staying in the south.'
+  },
+  'rome': {
+    stations: ['Roma Termini', 'Roma Tiburtina', 'Roma Ostiense'],
+    guidance: 'Roma Termini is the main station in the city center. Tiburtina serves some high-speed trains and is closer to the northeast. Ostiense connects to Fiumicino airport.'
+  },
+  'florence': {
+    stations: ['Firenze Santa Maria Novella', 'Firenze Campo di Marte', 'Firenze Rifredi'],
+    guidance: 'Santa Maria Novella (SMN) is the main central station. Campo di Marte serves some regional trains and is near the stadium.'
+  },
+  'naples': {
+    stations: ['Napoli Centrale', 'Napoli Afragola', 'Napoli Piazza Garibaldi'],
+    guidance: 'Napoli Centrale is downtown. Afragola is a modern high-speed station outside the city, convenient for some routes but requires transfer.'
+  },
+  'venice': {
+    stations: ['Venezia Santa Lucia', 'Venezia Mestre'],
+    guidance: 'Santa Lucia is ON the island (no cars allowed beyond). Mestre is on the mainland - you\'ll need a short train/bus to reach Venice island from there.'
+  },
+  'bologna': {
+    stations: ['Bologna Centrale', 'Bologna AV Mediopadana'],
+    guidance: 'Bologna Centrale is the main station. The AV station is for high-speed connections between Milan and Rome.'
+  }
+};
+
 // Input validation schema
 const TripDetailsSchema = z.object({
   destination: z.string().trim().min(1, "Destination is required").max(100, "Destination too long"),
@@ -34,6 +62,8 @@ const TripDetailsSchema = z.object({
   hasKids: z.boolean().optional().default(false),
   plannerMode: z.enum(["personal", "planner"]).optional().default("personal"),
   extraContext: z.string().trim().max(2000).optional(),
+  hasLodgingBooked: z.boolean().optional().default(false),
+  providerPreferences: z.array(z.string()).optional().default(['any']),
   clientInfo: z.object({
     numAdults: z.number().int().min(1).max(20),
     numKids: z.number().int().min(0).max(15),
@@ -49,11 +79,10 @@ const TripDetailsSchema = z.object({
     preferNonstop: z.boolean().optional(),
     maxStops: z.number().optional(),
   }).nullable().optional(),
-  // For regenerating specific days
   regenerateDayNumber: z.number().int().min(1).max(30).optional(),
 });
 
-// Strict output schema for itinerary
+// Enhanced activity schema with booking and seasonal info
 const ActivitySchema = z.object({
   timeSlot: z.enum(["morning", "afternoon", "evening"]),
   startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -72,7 +101,23 @@ const ActivitySchema = z.object({
   transitMode: z.string().max(50).optional(),
   accessibilityTags: z.array(z.string()).optional(),
   strollerNotes: z.string().max(300).optional(),
-  bookingLinkPlaceholder: z.string().max(200).optional(),
+  // Booking and rating fields
+  rating: z.number().min(0).max(5).optional(),
+  reviewCount: z.number().int().min(0).optional(),
+  bookingUrl: z.string().max(500).optional(),
+  providerType: z.enum(['local_tour', 'airbnb_experience', 'viator', 'getyourguide', 'restaurant', 'attraction', 'transport', 'hotel', 'other']).optional(),
+  whyItFits: z.string().max(300).optional(),
+  // Seasonal and crowd info
+  bestTimeToVisit: z.string().max(200).optional(),
+  crowdLevel: z.enum(['low', 'moderate', 'high', 'peak']).optional(),
+  seasonalNotes: z.string().max(300).optional(),
+  // Transport details
+  transportMode: z.enum(['walk', 'taxi', 'metro', 'bus', 'train', 'ferry', 'car', 'bike', 'other']).optional(),
+  transportBookingUrl: z.string().max(500).optional(),
+  transportStationNotes: z.string().max(500).optional(),
+  // Coordinates
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 const MealSuggestionSchema = z.object({
@@ -81,6 +126,42 @@ const MealSuggestionSchema = z.object({
   description: z.string().max(500).optional(),
   priceRange: z.enum(["$", "$$", "$$$", "$$$$"]).optional(),
   kidFriendlyNotes: z.string().max(300).optional(),
+  rating: z.number().min(0).max(5).optional(),
+  bookingUrl: z.string().max(500).optional(),
+});
+
+// Train segment schema
+const TrainSegmentSchema = z.object({
+  originCity: z.string().max(100),
+  originStation: z.string().max(100),
+  originStationAlternatives: z.array(z.string()).optional(),
+  destinationCity: z.string().max(100),
+  destinationStation: z.string().max(100),
+  destinationStationAlternatives: z.array(z.string()).optional(),
+  departureTime: z.string().optional(),
+  arrivalTime: z.string().optional(),
+  durationMinutes: z.number().int().optional(),
+  trainType: z.string().optional(),
+  bookingUrl: z.string().max(500).optional(),
+  priceEstimate: z.number().optional(),
+  stationGuidance: z.string().max(500).optional(),
+  stationWarning: z.string().max(500).optional(),
+});
+
+// Lodging suggestion schema
+const LodgingSuggestionSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(500).optional(),
+  lodgingType: z.enum(['hotel', 'vacation_rental', 'hostel', 'apartment', 'other']).optional(),
+  rating: z.number().min(0).max(5).optional(),
+  reviewCount: z.number().int().min(0).optional(),
+  pricePerNight: z.number().optional(),
+  bookingUrl: z.string().max(500).optional(),
+  address: z.string().max(300).optional(),
+  amenities: z.array(z.string()).optional(),
+  isKidFriendly: z.boolean().optional(),
+  distanceFromCenter: z.string().max(100).optional(),
+  whyRecommended: z.string().max(300).optional(),
 });
 
 const DaySchema = z.object({
@@ -92,6 +173,7 @@ const DaySchema = z.object({
   mealSuggestions: z.array(MealSuggestionSchema).optional(),
   planB: z.string().max(500).optional(),
   notes: z.string().max(500).optional(),
+  trainSegments: z.array(TrainSegmentSchema).optional(),
 });
 
 const ItinerarySchema = z.object({
@@ -99,6 +181,8 @@ const ItinerarySchema = z.object({
   days: z.array(DaySchema).min(1).max(30),
   packingTips: z.array(z.string().max(200)).optional(),
   generalTips: z.array(z.string().max(200)).optional(),
+  lodgingSuggestions: z.array(LodgingSuggestionSchema).optional(),
+  trainBookingTips: z.string().max(500).optional(),
 });
 
 type TripDetails = z.infer<typeof TripDetailsSchema>;
@@ -222,12 +306,10 @@ const fetchWithRetry = async (
     try {
       const response = await fetch(url, options);
       
-      // Don't retry on 4xx errors (client errors)
       if (response.status >= 400 && response.status < 500 && response.status !== 429) {
         return response;
       }
       
-      // Retry on 429 (rate limit) or 5xx (server errors)
       if (response.status === 429 || response.status >= 500) {
         if (attempt < maxRetries) {
           const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
@@ -269,6 +351,48 @@ const calculateDayDates = (startDate: string, numDays: number): string[] => {
   return dates;
 };
 
+// Detect Italy multi-station cities in destination
+const detectItalyStationWarnings = (destination: string): { city: string; info: typeof ITALY_MULTI_STATION_CITIES[string] }[] => {
+  const warnings: { city: string; info: typeof ITALY_MULTI_STATION_CITIES[string] }[] = [];
+  const destLower = destination.toLowerCase();
+  
+  // Check if destination is in Italy or mentions Italian cities
+  const isItaly = destLower.includes('italy') || destLower.includes('italia');
+  
+  for (const [city, info] of Object.entries(ITALY_MULTI_STATION_CITIES)) {
+    if (destLower.includes(city) || isItaly) {
+      warnings.push({ city: city.charAt(0).toUpperCase() + city.slice(1), info });
+    }
+  }
+  
+  return warnings;
+};
+
+// Generate affiliate booking URLs
+const generateBookingUrl = (type: string, name: string, destination: string, date?: string): string => {
+  const encodedName = encodeURIComponent(name);
+  const encodedDest = encodeURIComponent(destination);
+  const dateParam = date ? `&date=${date}` : '';
+  
+  switch (type) {
+    case 'local_tour':
+    case 'viator':
+      return `https://www.viator.com/searchResults/all?text=${encodedName}+${encodedDest}${dateParam}`;
+    case 'airbnb_experience':
+      return `https://www.airbnb.com/s/experiences?query=${encodedName}+${encodedDest}`;
+    case 'getyourguide':
+      return `https://www.getyourguide.com/s/?q=${encodedName}+${encodedDest}`;
+    case 'restaurant':
+      return `https://www.tripadvisor.com/Search?q=${encodedName}+${encodedDest}`;
+    case 'hotel':
+      return `https://www.booking.com/searchresults.html?ss=${encodedName}+${encodedDest}`;
+    case 'train':
+      return `https://www.thetrainline.com/book/results?origin=${encodedDest}`;
+    default:
+      return `https://www.google.com/search?q=${encodedName}+${encodedDest}+booking`;
+  }
+};
+
 // Validate and repair itinerary to match schema
 const validateAndRepairItinerary = async (
   itinerary: unknown,
@@ -281,11 +405,21 @@ const validateAndRepairItinerary = async (
   
   // First, enforce date integrity - ALWAYS use user's dates
   if (itinerary && typeof itinerary === 'object' && 'days' in itinerary) {
-    const it = itinerary as { days: Array<{ dayNumber: number; date?: string }> };
+    const it = itinerary as { days: Array<{ dayNumber: number; date?: string; activities?: Array<any> }> };
     for (const day of it.days) {
       const dayIndex = day.dayNumber - 1;
       if (dayIndex >= 0 && dayIndex < dayDates.length) {
         day.date = dayDates[dayIndex];
+      }
+      
+      // Add booking URLs to activities if missing
+      if (day.activities) {
+        for (const activity of day.activities) {
+          if (!activity.bookingUrl && activity.title) {
+            const providerType = activity.providerType || 'attraction';
+            activity.bookingUrl = generateBookingUrl(providerType, activity.title, tripDetails.destination, day.date);
+          }
+        }
       }
     }
   }
@@ -313,8 +447,14 @@ Required structure:
   - activities: array with at least 1 activity, each having:
     - timeSlot: "morning" | "afternoon" | "evening"
     - title: string (required)
+    - rating: number 0-5 (optional)
+    - bookingUrl: string URL (optional)
+    - whyItFits: string explaining why this fits user preferences
+    - bestTimeToVisit: string
+    - crowdLevel: "low" | "moderate" | "high" | "peak"
     - Other fields optional
   - mealSuggestions, planB, notes: optional
+- lodgingSuggestions: array (optional) if lodging not booked
 
 CRITICAL: The dates MUST be exactly: ${dayDates.join(', ')}. Do NOT change these dates.
 
@@ -390,6 +530,8 @@ Return ONLY the repaired valid JSON, no explanation.`;
       timeSlot: "morning" as const,
       title: "Explore the area",
       description: "We couldn't generate detailed activities for this day. Please use the regenerate button to try again.",
+      whyItFits: "General exploration",
+      crowdLevel: "moderate" as const,
     }],
     notes: "This day needs to be regenerated - tap the button below.",
   }));
@@ -413,14 +555,35 @@ const buildSystemPrompt = (tripDetails: TripDetails): string => {
   const isPlannerMode = tripDetails.plannerMode === "planner";
   const clientInfo = tripDetails.clientInfo;
   const profilePrefs = tripDetails.profilePreferences;
+  const providerPrefs = tripDetails.providerPreferences || ['any'];
+  const needsLodging = !tripDetails.hasLodgingBooked;
 
-  let systemPrompt = `You are an expert travel planner creating detailed, practical itineraries.
+  let systemPrompt = `You are an expert travel planner creating detailed, practical itineraries with REAL bookable activities.
 
 CRITICAL RULES:
 1. You MUST use the EXACT dates provided by the user. Never suggest alternative dates.
 2. Return ONLY valid JSON, no markdown or additional text.
 3. Each day must have at least one activity.
-4. Be realistic about timing and travel between locations.`;
+4. Be realistic about timing and travel between locations.
+5. ALWAYS include booking information and ratings when possible.
+6. For EVERY activity/tour, include a "whyItFits" explaining why it matches user preferences.
+7. Include "bestTimeToVisit" and "crowdLevel" for each attraction.
+8. Generate REAL booking URLs for activities (use Viator, GetYourGuide, TripAdvisor formats).`;
+
+  // Provider preferences
+  if (!providerPrefs.includes('any')) {
+    const providerNames = providerPrefs.map(p => {
+      if (p === 'local_tour') return 'local tour operators';
+      if (p === 'airbnb_experience') return 'Airbnb Experiences';
+      return p;
+    }).join(', ');
+    systemPrompt += `\n\nPRIORITIZE activities from: ${providerNames}`;
+  }
+  
+  // Lodging suggestions if not booked
+  if (needsLodging) {
+    systemPrompt += `\n\nINCLUDE "lodgingSuggestions" array with 3-5 hotel/rental options because user hasn't booked lodging yet.`;
+  }
   
   if (isPlannerMode && clientInfo) {
     systemPrompt += `\n\nYou are helping a travel professional plan trips for clients.
@@ -447,7 +610,8 @@ ${hasKids ? '- Include family activities during leisure time' : ''}`;
 - Account for nap times and rest periods
 - Stroller-friendly options when needed
 - "Plan B" alternatives for weather/tired kids
-- Group activities by proximity`;
+- Group activities by proximity
+- ALWAYS set "isKidFriendly" and explain in "whyItFits" why each activity works for families`;
   } else {
     systemPrompt += `\n\nAdult travel focus:
 - Diverse experiences and dining
@@ -466,11 +630,20 @@ ${hasKids ? '- Include family activities during leisure time' : ''}`;
 };
 
 // Build user prompt for itinerary generation
-const buildUserPrompt = (tripDetails: TripDetails, tripDays: number, dayDates: string[], hasKids: boolean): string => {
+const buildUserPrompt = (
+  tripDetails: TripDetails, 
+  tripDays: number, 
+  dayDates: string[], 
+  hasKids: boolean,
+  italyWarnings: { city: string; info: typeof ITALY_MULTI_STATION_CITIES[string] }[]
+): string => {
   const isBusiness = tripDetails.tripPurpose === "business";
-  const isMixed = tripDetails.tripPurpose === "mixed";
   const isPlannerMode = tripDetails.plannerMode === "planner";
   const clientInfo = tripDetails.clientInfo;
+  const needsLodging = !tripDetails.hasLodgingBooked;
+  const hasTrainTravel = tripDetails.destination.toLowerCase().includes('italy') || 
+                         tripDetails.destination.toLowerCase().includes('europe') ||
+                         tripDetails.extraContext?.toLowerCase().includes('train');
 
   const safeDestination = sanitizeForPrompt(tripDetails.destination);
   const allInterests = tripDetails.interests
@@ -518,37 +691,91 @@ ${clientInfo.kidsAges.length > 0 ? `- Children's ages: ${clientInfo.kidsAges.joi
 ${clientInfo.homeAirport ? `- From: ${clientInfo.homeAirport}` : ''}`;
   }
 
+  // Italy station warnings
+  if (italyWarnings.length > 0 && hasTrainTravel) {
+    userPrompt += `
+
+⚠️ ITALY TRAIN STATION WARNINGS:
+${italyWarnings.map(w => `${w.city}: Has multiple stations (${w.info.stations.join(', ')}). ${w.info.guidance}`).join('\n')}
+
+When suggesting train travel, ALWAYS:
+1. Specify the exact station name
+2. Include "stationWarning" if the city has multiple stations
+3. Include "stationGuidance" with which station is best for the lodging location`;
+  }
+
   userPrompt += `
 
 Return this exact JSON structure:
 {
   "tripSummary": "Brief overview",
+  ${needsLodging ? `"lodgingSuggestions": [
+    {
+      "name": "Hotel/Rental Name",
+      "description": "Why it's great",
+      "lodgingType": "hotel|vacation_rental|hostel|apartment",
+      "rating": 4.5,
+      "reviewCount": 500,
+      "pricePerNight": 150,
+      "bookingUrl": "https://booking.com/...",
+      "address": "Full address",
+      "amenities": ["WiFi", "Pool", "Kitchen"],
+      "isKidFriendly": true,
+      "distanceFromCenter": "5 min walk",
+      "whyRecommended": "Perfect for families because..."
+    }
+  ],` : ''}
   "days": [
     {
       "dayNumber": 1,
       "date": "${dayDates[0]}",
       "title": "Day theme",
       "weather_notes": "Weather tips",
+      ${hasTrainTravel ? `"trainSegments": [
+        {
+          "originCity": "City",
+          "originStation": "Exact Station Name",
+          "destinationCity": "City",
+          "destinationStation": "Exact Station Name",
+          "departureTime": "09:30",
+          "arrivalTime": "11:45",
+          "durationMinutes": 135,
+          "trainType": "Frecciarossa",
+          "bookingUrl": "https://www.thetrainline.com/...",
+          "priceEstimate": 45,
+          "stationGuidance": "Best station for your hotel location",
+          "stationWarning": "Multiple stations in this city - check carefully"
+        }
+      ],` : ''}
       "activities": [
         {
           "timeSlot": "morning|afternoon|evening",
           "startTime": "HH:MM",
           "endTime": "HH:MM",
           "title": "Activity name",
-          "description": "Why this is great",
+          "description": "What you'll experience",
           "locationName": "Place name",
           "locationAddress": "Full address",
           "category": "${isBusiness ? 'meeting|restaurant|transport|networking|rest' : 'attraction|restaurant|outdoor|museum|entertainment|transport'}",
           "durationMinutes": 90,
           "costEstimate": 50,
-          "transitMode": "walk|taxi|metro|bus",
-          "accessibilityTags": ["wheelchair", "stroller-friendly"],
-          "bookingLinkPlaceholder": "search: [venue name] booking"
-          ${hasKids ? `,"isKidFriendly": true,
+          "rating": 4.5,
+          "reviewCount": 1200,
+          "bookingUrl": "https://www.viator.com/tours/...",
+          "providerType": "local_tour|airbnb_experience|viator|getyourguide|restaurant|attraction",
+          "whyItFits": "Perfect for your family because [specific reason based on kids ages/interests]",
+          "bestTimeToVisit": "Morning before 10am - fewer crowds",
+          "crowdLevel": "low|moderate|high|peak",
+          "seasonalNotes": "Peak season in July - expect longer queues",
+          "transitMode": "walk|taxi|metro|bus|train",
+          ${hasTrainTravel ? `"transportBookingUrl": "https://...",
+          "transportStationNotes": "Take the Metro Line 1 from hotel",` : ''}
+          ${hasKids ? `"isKidFriendly": true,
           "isStrollerFriendly": true,
-          "strollerNotes": "Stroller info"` : ''}
-          ,"requiresReservation": false,
-          "reservationInfo": "How to book"
+          "strollerNotes": "Stroller info",` : ''}
+          "requiresReservation": false,
+          "reservationInfo": "How to book",
+          "accessibilityTags": ["wheelchair", "stroller-friendly"]
         }
       ],
       "mealSuggestions": [
@@ -556,19 +783,26 @@ Return this exact JSON structure:
           "mealType": "breakfast|lunch|dinner|snack",
           "name": "Restaurant",
           "description": "Why it's good",
-          "priceRange": "$|$$|$$$"
+          "priceRange": "$|$$|$$$",
+          "rating": 4.3,
+          "bookingUrl": "https://www.tripadvisor.com/..."
           ${hasKids ? `,"kidFriendlyNotes": "For families"` : ''}
         }
       ],
-      "planB": "Alternative plan",
+      "planB": "Alternative plan if weather is bad or kids are tired",
       "notes": "Day tips"
     }
   ],
   "packingTips": ["Item 1", "Item 2"],
-  "generalTips": ["Tip 1", "Tip 2"]
+  "generalTips": ["Tip 1", "Tip 2"]${hasTrainTravel ? `,
+  "trainBookingTips": "Book Trenitalia or Italo trains 2-3 weeks ahead for best prices. Consider Eurail pass for multiple journeys."` : ''}
 }
 
-CRITICAL: Each day's date field MUST exactly match the dates listed above. Return ONLY valid JSON.`;
+CRITICAL REQUIREMENTS:
+1. Each day's date field MUST exactly match the dates listed above.
+2. EVERY activity MUST have: rating (estimate 3.5-5.0), bookingUrl, whyItFits, bestTimeToVisit, crowdLevel
+3. If rating unavailable, use null but STILL provide bookingUrl
+4. Return ONLY valid JSON.`;
 
   return userPrompt;
 };
@@ -702,12 +936,15 @@ serve(async (req) => {
     // Calculate exact dates for each day
     const dayDates = calculateDayDates(tripDetails.startDate, tripDays);
     const hasKids = tripDetails.hasKids || tripDetails.kidsAges.length > 0;
+    
+    // Detect Italy station warnings
+    const italyWarnings = detectItalyStationWarnings(tripDetails.destination);
 
     logCtx.step = 'generating_itinerary';
-    log('info', 'Starting itinerary generation', logCtx, { tripDays, hasKids });
+    log('info', 'Starting itinerary generation', logCtx, { tripDays, hasKids, italyWarnings: italyWarnings.length });
 
     const systemPrompt = buildSystemPrompt(tripDetails);
-    const userPrompt = buildUserPrompt(tripDetails, tripDays, dayDates, hasKids);
+    const userPrompt = buildUserPrompt(tripDetails, tripDays, dayDates, hasKids, italyWarnings);
 
     const response = await fetchWithRetry(
       'https://ai.gateway.lovable.dev/v1/chat/completions',
@@ -810,7 +1047,9 @@ serve(async (req) => {
 
     log('info', 'Itinerary generated successfully', logCtx, { 
       daysGenerated: itinerary.days.length,
-      wasRepaired 
+      wasRepaired,
+      hasLodgingSuggestions: !!itinerary.lodgingSuggestions?.length,
+      hasTrainSegments: itinerary.days.some(d => d.trainSegments?.length)
     });
 
     // Mark days that need regeneration
@@ -826,6 +1065,7 @@ serve(async (req) => {
         wasRepaired,
         daysNeedingRegeneration,
         generatedAt: new Date().toISOString(),
+        italyStationWarnings: italyWarnings.length > 0 ? italyWarnings : undefined,
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

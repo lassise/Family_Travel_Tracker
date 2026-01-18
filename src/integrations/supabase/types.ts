@@ -627,9 +627,12 @@ export type Database = {
       }
       itinerary_items: {
         Row: {
+          best_time_to_visit: string | null
+          booking_url: string | null
           category: string | null
           cost_estimate: number | null
           created_at: string
+          crowd_level: string | null
           description: string | null
           duration_minutes: number | null
           end_time: string | null
@@ -641,18 +644,29 @@ export type Database = {
           location_address: string | null
           location_name: string | null
           longitude: number | null
+          provider_type: string | null
+          rating: number | null
           requires_reservation: boolean | null
           reservation_info: string | null
+          review_count: number | null
+          seasonal_notes: string | null
           sort_order: number
           start_time: string | null
           time_slot: string | null
           title: string
+          transport_booking_url: string | null
+          transport_mode: string | null
+          transport_station_notes: string | null
           updated_at: string
+          why_it_fits: string | null
         }
         Insert: {
+          best_time_to_visit?: string | null
+          booking_url?: string | null
           category?: string | null
           cost_estimate?: number | null
           created_at?: string
+          crowd_level?: string | null
           description?: string | null
           duration_minutes?: number | null
           end_time?: string | null
@@ -664,18 +678,29 @@ export type Database = {
           location_address?: string | null
           location_name?: string | null
           longitude?: number | null
+          provider_type?: string | null
+          rating?: number | null
           requires_reservation?: boolean | null
           reservation_info?: string | null
+          review_count?: number | null
+          seasonal_notes?: string | null
           sort_order?: number
           start_time?: string | null
           time_slot?: string | null
           title: string
+          transport_booking_url?: string | null
+          transport_mode?: string | null
+          transport_station_notes?: string | null
           updated_at?: string
+          why_it_fits?: string | null
         }
         Update: {
+          best_time_to_visit?: string | null
+          booking_url?: string | null
           category?: string | null
           cost_estimate?: number | null
           created_at?: string
+          crowd_level?: string | null
           description?: string | null
           duration_minutes?: number | null
           end_time?: string | null
@@ -687,13 +712,21 @@ export type Database = {
           location_address?: string | null
           location_name?: string | null
           longitude?: number | null
+          provider_type?: string | null
+          rating?: number | null
           requires_reservation?: boolean | null
           reservation_info?: string | null
+          review_count?: number | null
+          seasonal_notes?: string | null
           sort_order?: number
           start_time?: string | null
           time_slot?: string | null
           title?: string
+          transport_booking_url?: string | null
+          transport_mode?: string | null
+          transport_station_notes?: string | null
           updated_at?: string
+          why_it_fits?: string | null
         }
         Relationships: [
           {
@@ -1464,6 +1497,80 @@ export type Database = {
           },
         ]
       }
+      trip_lodging_suggestions: {
+        Row: {
+          address: string | null
+          amenities: string[] | null
+          booking_url: string | null
+          created_at: string
+          currency: string | null
+          description: string | null
+          distance_from_center: string | null
+          id: string
+          image_url: string | null
+          is_kid_friendly: boolean | null
+          latitude: number | null
+          lodging_type: string | null
+          longitude: number | null
+          name: string
+          price_per_night: number | null
+          rating: number | null
+          review_count: number | null
+          trip_id: string
+          why_recommended: string | null
+        }
+        Insert: {
+          address?: string | null
+          amenities?: string[] | null
+          booking_url?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          distance_from_center?: string | null
+          id?: string
+          image_url?: string | null
+          is_kid_friendly?: boolean | null
+          latitude?: number | null
+          lodging_type?: string | null
+          longitude?: number | null
+          name: string
+          price_per_night?: number | null
+          rating?: number | null
+          review_count?: number | null
+          trip_id: string
+          why_recommended?: string | null
+        }
+        Update: {
+          address?: string | null
+          amenities?: string[] | null
+          booking_url?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          distance_from_center?: string | null
+          id?: string
+          image_url?: string | null
+          is_kid_friendly?: boolean | null
+          latitude?: number | null
+          lodging_type?: string | null
+          longitude?: number | null
+          name?: string
+          price_per_night?: number | null
+          rating?: number | null
+          review_count?: number | null
+          trip_id?: string
+          why_recommended?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_lodging_suggestions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_notes: {
         Row: {
           content: string
@@ -1526,6 +1633,90 @@ export type Database = {
           },
         ]
       }
+      trip_train_segments: {
+        Row: {
+          arrival_time: string | null
+          booking_url: string | null
+          created_at: string
+          currency: string | null
+          departure_date: string | null
+          departure_time: string | null
+          destination_city: string
+          destination_station: string
+          destination_station_alternatives: string[] | null
+          duration_minutes: number | null
+          id: string
+          itinerary_day_id: string | null
+          origin_city: string
+          origin_station: string
+          origin_station_alternatives: string[] | null
+          price_estimate: number | null
+          station_guidance: string | null
+          station_warning: string | null
+          train_type: string | null
+          trip_id: string
+        }
+        Insert: {
+          arrival_time?: string | null
+          booking_url?: string | null
+          created_at?: string
+          currency?: string | null
+          departure_date?: string | null
+          departure_time?: string | null
+          destination_city: string
+          destination_station: string
+          destination_station_alternatives?: string[] | null
+          duration_minutes?: number | null
+          id?: string
+          itinerary_day_id?: string | null
+          origin_city: string
+          origin_station: string
+          origin_station_alternatives?: string[] | null
+          price_estimate?: number | null
+          station_guidance?: string | null
+          station_warning?: string | null
+          train_type?: string | null
+          trip_id: string
+        }
+        Update: {
+          arrival_time?: string | null
+          booking_url?: string | null
+          created_at?: string
+          currency?: string | null
+          departure_date?: string | null
+          departure_time?: string | null
+          destination_city?: string
+          destination_station?: string
+          destination_station_alternatives?: string[] | null
+          duration_minutes?: number | null
+          id?: string
+          itinerary_day_id?: string | null
+          origin_city?: string
+          origin_station?: string
+          origin_station_alternatives?: string[] | null
+          price_estimate?: number | null
+          station_guidance?: string | null
+          station_warning?: string | null
+          train_type?: string | null
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_train_segments_itinerary_day_id_fkey"
+            columns: ["itinerary_day_id"]
+            isOneToOne: false
+            referencedRelation: "itinerary_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_train_segments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trips: {
         Row: {
           budget_total: number | null
@@ -1535,11 +1726,14 @@ export type Database = {
           destination: string | null
           end_date: string | null
           family_group_id: string | null
+          has_lodging_booked: boolean | null
           id: string
           interests: string[] | null
           kids_ages: number[] | null
+          lodging_address: string | null
           notes: string | null
           pace_preference: string | null
+          provider_preferences: string[] | null
           start_date: string | null
           status: string | null
           title: string
@@ -1555,11 +1749,14 @@ export type Database = {
           destination?: string | null
           end_date?: string | null
           family_group_id?: string | null
+          has_lodging_booked?: boolean | null
           id?: string
           interests?: string[] | null
           kids_ages?: number[] | null
+          lodging_address?: string | null
           notes?: string | null
           pace_preference?: string | null
+          provider_preferences?: string[] | null
           start_date?: string | null
           status?: string | null
           title: string
@@ -1575,11 +1772,14 @@ export type Database = {
           destination?: string | null
           end_date?: string | null
           family_group_id?: string | null
+          has_lodging_booked?: boolean | null
           id?: string
           interests?: string[] | null
           kids_ages?: number[] | null
+          lodging_address?: string | null
           notes?: string | null
           pace_preference?: string | null
+          provider_preferences?: string[] | null
           start_date?: string | null
           status?: string | null
           title?: string

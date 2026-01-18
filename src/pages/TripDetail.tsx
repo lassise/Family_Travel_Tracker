@@ -10,22 +10,18 @@ import {
   ArrowLeft, 
   Calendar, 
   MapPin, 
-  Clock, 
-  DollarSign, 
   Baby, 
   Loader2,
   CloudRain,
-  Utensils,
-  Navigation,
-  CheckCircle2,
-  AlertCircle,
   RefreshCw,
-  ShoppingCart
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import TripCollaboratorsDialog from "@/components/trips/TripCollaboratorsDialog";
 import { CustomActivityDialog } from "@/components/trips/CustomActivityDialog";
+import ActivityBookingCard from "@/components/trips/ActivityBookingCard";
+import TrainSegmentCard from "@/components/trips/TrainSegmentCard";
+import LodgingSuggestionsCard from "@/components/trips/LodgingSuggestionsCard";
 
 interface ItineraryItem {
   id: string;
@@ -44,6 +40,17 @@ interface ItineraryItem {
   is_stroller_friendly: boolean | null;
   requires_reservation: boolean | null;
   reservation_info: string | null;
+  rating: number | null;
+  review_count: number | null;
+  booking_url: string | null;
+  provider_type: string | null;
+  why_it_fits: string | null;
+  best_time_to_visit: string | null;
+  crowd_level: string | null;
+  seasonal_notes: string | null;
+  transport_mode: string | null;
+  transport_booking_url: string | null;
+  transport_station_notes: string | null;
 }
 
 interface ItineraryDay {
@@ -324,7 +331,7 @@ const TripDetail = () => {
                     <div className="space-y-4">
                       {day.itinerary_items
                         ?.sort((a, b) => a.sort_order - b.sort_order)
-                        .map((item, index) => (
+                        .map((item) => (
                           <div
                             key={item.id}
                             className="relative pl-8 pb-6 border-l-2 border-muted last:pb-0 last:border-transparent"
@@ -332,87 +339,10 @@ const TripDetail = () => {
                             {/* Timeline dot */}
                             <div className="absolute left-[-9px] top-0 w-4 h-4 rounded-full bg-primary border-2 border-background" />
                             
-                            <div className="bg-muted/30 rounded-lg p-4">
-                              <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-                                <div className="flex items-center gap-2">
-                                  {item.start_time && (
-                                    <Badge variant="outline" className="text-xs">
-                                      <Clock className="h-3 w-3 mr-1" />
-                                      {formatTime(item.start_time)}
-                                      {item.end_time && ` - ${formatTime(item.end_time)}`}
-                                    </Badge>
-                                  )}
-                                  <Badge className={getCategoryColor(item.category)}>
-                                    {item.category || "activity"}
-                                  </Badge>
-                                </div>
-                                {/* Only show kid-friendly badges if trip has kids */}
-                                {trip.kids_ages && trip.kids_ages.length > 0 && (
-                                  <div className="flex gap-1">
-                                    {item.is_kid_friendly && (
-                                      <Badge variant="secondary" className="text-xs">
-                                        <Baby className="h-3 w-3 mr-1" />
-                                        Kid-friendly
-                                      </Badge>
-                                    )}
-                                    {item.is_stroller_friendly && (
-                                      <Badge variant="secondary" className="text-xs">
-                                        <ShoppingCart className="h-3 w-3 mr-1" />
-                                        Stroller OK
-                                      </Badge>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-
-                              <h4 className="font-semibold text-lg">{item.title}</h4>
-                              
-                              {item.description && (
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  {item.description}
-                                </p>
-                              )}
-
-                              <div className="flex flex-wrap gap-4 mt-3 text-sm">
-                                {item.location_name && (
-                                  <div className="flex items-center gap-1 text-muted-foreground">
-                                    <MapPin className="h-4 w-4" />
-                                    {item.location_name}
-                                  </div>
-                                )}
-                                {item.duration_minutes && (
-                                  <div className="flex items-center gap-1 text-muted-foreground">
-                                    <Clock className="h-4 w-4" />
-                                    {item.duration_minutes} min
-                                  </div>
-                                )}
-                                {item.cost_estimate !== null && item.cost_estimate > 0 && (
-                                  <div className="flex items-center gap-1 text-muted-foreground">
-                                    <DollarSign className="h-4 w-4" />
-                                    ~${item.cost_estimate}
-                                  </div>
-                                )}
-                              </div>
-
-                              {item.requires_reservation && (
-                                <div className="flex items-start gap-2 mt-3 p-2 bg-yellow-500/10 rounded-md">
-                                  <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5" />
-                                  <div className="text-sm">
-                                    <span className="font-medium text-yellow-600">Reservation required</span>
-                                    {item.reservation_info && (
-                                      <p className="text-muted-foreground">{item.reservation_info}</p>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {item.location_address && (
-                                <Button variant="link" size="sm" className="p-0 h-auto mt-2">
-                                  <Navigation className="h-3 w-3 mr-1" />
-                                  Get directions
-                                </Button>
-                              )}
-                            </div>
+                            <ActivityBookingCard 
+                              activity={item} 
+                              hasKids={!!(trip.kids_ages && trip.kids_ages.length > 0)} 
+                            />
                           </div>
                         ))}
                     </div>
