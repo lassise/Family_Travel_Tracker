@@ -135,6 +135,111 @@ export const chineseProvinces: Record<string, string> = {
   'CN-HK': 'Hong Kong', 'CN-MO': 'Macau',
 };
 
+// Irish Counties
+export const irishCounties: Record<string, string> = {
+  'IE-CW': 'Carlow', 'IE-CN': 'Cavan', 'IE-CE': 'Clare', 'IE-CO': 'Cork',
+  'IE-DL': 'Donegal', 'IE-D': 'Dublin', 'IE-G': 'Galway', 'IE-KY': 'Kerry',
+  'IE-KE': 'Kildare', 'IE-KK': 'Kilkenny', 'IE-LS': 'Laois', 'IE-LM': 'Leitrim',
+  'IE-LK': 'Limerick', 'IE-LD': 'Longford', 'IE-LH': 'Louth', 'IE-MO': 'Mayo',
+  'IE-MH': 'Meath', 'IE-MN': 'Monaghan', 'IE-OY': 'Offaly', 'IE-RN': 'Roscommon',
+  'IE-SO': 'Sligo', 'IE-TA': 'Tipperary', 'IE-WD': 'Waterford', 'IE-WH': 'Westmeath',
+  'IE-WX': 'Wexford', 'IE-WW': 'Wicklow',
+};
+
+// Netherlands Provinces
+export const netherlandsProvinces: Record<string, string> = {
+  'NL-DR': 'Drenthe', 'NL-FL': 'Flevoland', 'NL-FR': 'Friesland', 'NL-GE': 'Gelderland',
+  'NL-GR': 'Groningen', 'NL-LI': 'Limburg', 'NL-NB': 'North Brabant', 'NL-NH': 'North Holland',
+  'NL-OV': 'Overijssel', 'NL-ZH': 'South Holland', 'NL-UT': 'Utrecht', 'NL-ZE': 'Zeeland',
+};
+
+// Swiss Cantons
+export const swissCantons: Record<string, string> = {
+  'CH-AG': 'Aargau', 'CH-AR': 'Appenzell Ausserrhoden', 'CH-AI': 'Appenzell Innerrhoden',
+  'CH-BL': 'Basel-Landschaft', 'CH-BS': 'Basel-Stadt', 'CH-BE': 'Bern', 'CH-FR': 'Fribourg',
+  'CH-GE': 'Geneva', 'CH-GL': 'Glarus', 'CH-GR': 'Graubünden', 'CH-JU': 'Jura',
+  'CH-LU': 'Lucerne', 'CH-NE': 'Neuchâtel', 'CH-NW': 'Nidwalden', 'CH-OW': 'Obwalden',
+  'CH-SG': 'St. Gallen', 'CH-SH': 'Schaffhausen', 'CH-SZ': 'Schwyz', 'CH-SO': 'Solothurn',
+  'CH-TG': 'Thurgau', 'CH-TI': 'Ticino', 'CH-UR': 'Uri', 'CH-VS': 'Valais',
+  'CH-VD': 'Vaud', 'CH-ZG': 'Zug', 'CH-ZH': 'Zürich',
+};
+
+// Austrian States
+export const austrianStates: Record<string, string> = {
+  'AT-1': 'Burgenland', 'AT-2': 'Carinthia', 'AT-3': 'Lower Austria', 'AT-4': 'Upper Austria',
+  'AT-5': 'Salzburg', 'AT-6': 'Styria', 'AT-7': 'Tyrol', 'AT-8': 'Vorarlberg', 'AT-9': 'Vienna',
+};
+
+// Belgian Regions/Provinces
+export const belgianProvinces: Record<string, string> = {
+  'BE-VAN': 'Antwerp', 'BE-WBR': 'Walloon Brabant', 'BE-VBR': 'Flemish Brabant',
+  'BE-BRU': 'Brussels', 'BE-VOV': 'East Flanders', 'BE-WHT': 'Hainaut',
+  'BE-VLI': 'Limburg', 'BE-WLG': 'Liège', 'BE-WLX': 'Luxembourg', 'BE-WNA': 'Namur',
+  'BE-VWV': 'West Flanders',
+};
+
+// Polish Voivodeships
+export const polishVoivodeships: Record<string, string> = {
+  'PL-DS': 'Lower Silesian', 'PL-KP': 'Kuyavian-Pomeranian', 'PL-LU': 'Lublin',
+  'PL-LB': 'Lubusz', 'PL-LD': 'Łódź', 'PL-MA': 'Lesser Poland', 'PL-MZ': 'Masovian',
+  'PL-OP': 'Opole', 'PL-PK': 'Subcarpathian', 'PL-PD': 'Podlaskie', 'PL-PM': 'Pomeranian',
+  'PL-SL': 'Silesian', 'PL-SK': 'Holy Cross', 'PL-WN': 'Warmian-Masurian',
+  'PL-WP': 'Greater Poland', 'PL-ZP': 'West Pomeranian',
+};
+
+// Portuguese Districts
+export const portugueseDistricts: Record<string, string> = {
+  'PT-01': 'Aveiro', 'PT-02': 'Beja', 'PT-03': 'Braga', 'PT-04': 'Bragança',
+  'PT-05': 'Castelo Branco', 'PT-06': 'Coimbra', 'PT-07': 'Évora', 'PT-08': 'Faro',
+  'PT-09': 'Guarda', 'PT-10': 'Leiria', 'PT-11': 'Lisbon', 'PT-12': 'Portalegre',
+  'PT-13': 'Porto', 'PT-14': 'Santarém', 'PT-15': 'Setúbal', 'PT-16': 'Viana do Castelo',
+  'PT-17': 'Vila Real', 'PT-18': 'Viseu', 'PT-20': 'Azores', 'PT-30': 'Madeira',
+};
+
+// Greek Regions
+export const greekRegions: Record<string, string> = {
+  'GR-A': 'East Macedonia and Thrace', 'GR-B': 'Central Macedonia', 'GR-C': 'West Macedonia',
+  'GR-D': 'Epirus', 'GR-E': 'Thessaly', 'GR-F': 'Ionian Islands', 'GR-G': 'West Greece',
+  'GR-H': 'Central Greece', 'GR-I': 'Attica', 'GR-J': 'Peloponnese',
+  'GR-K': 'North Aegean', 'GR-L': 'South Aegean', 'GR-M': 'Crete',
+};
+
+// South Korean Provinces
+export const southKoreanProvinces: Record<string, string> = {
+  'KR-11': 'Seoul', 'KR-26': 'Busan', 'KR-27': 'Daegu', 'KR-28': 'Incheon',
+  'KR-29': 'Gwangju', 'KR-30': 'Daejeon', 'KR-31': 'Ulsan', 'KR-41': 'Gyeonggi',
+  'KR-42': 'Gangwon', 'KR-43': 'North Chungcheong', 'KR-44': 'South Chungcheong',
+  'KR-45': 'North Jeolla', 'KR-46': 'South Jeolla', 'KR-47': 'North Gyeongsang',
+  'KR-48': 'South Gyeongsang', 'KR-49': 'Jeju', 'KR-50': 'Sejong',
+};
+
+// New Zealand Regions
+export const newZealandRegions: Record<string, string> = {
+  'NZ-AUK': 'Auckland', 'NZ-BOP': 'Bay of Plenty', 'NZ-CAN': 'Canterbury',
+  'NZ-GIS': 'Gisborne', 'NZ-HKB': "Hawke's Bay", 'NZ-MWT': 'Manawatū-Whanganui',
+  'NZ-MBH': 'Marlborough', 'NZ-NSN': 'Nelson', 'NZ-NTL': 'Northland', 'NZ-OTA': 'Otago',
+  'NZ-STL': 'Southland', 'NZ-TKI': 'Taranaki', 'NZ-TAS': 'Tasman', 'NZ-WKO': 'Waikato',
+  'NZ-WGN': 'Wellington', 'NZ-WTC': 'West Coast',
+};
+
+// Thai Regions (Grouped)
+export const thaiRegions: Record<string, string> = {
+  'TH-10': 'Bangkok', 'TH-N': 'Northern Thailand', 'TH-NE': 'Northeastern Thailand',
+  'TH-E': 'Eastern Thailand', 'TH-W': 'Western Thailand', 'TH-C': 'Central Thailand',
+  'TH-S': 'Southern Thailand',
+};
+
+// Argentine Provinces
+export const argentineProvinces: Record<string, string> = {
+  'AR-C': 'Buenos Aires City', 'AR-B': 'Buenos Aires', 'AR-K': 'Catamarca',
+  'AR-H': 'Chaco', 'AR-U': 'Chubut', 'AR-X': 'Córdoba', 'AR-W': 'Corrientes',
+  'AR-E': 'Entre Ríos', 'AR-P': 'Formosa', 'AR-Y': 'Jujuy', 'AR-L': 'La Pampa',
+  'AR-F': 'La Rioja', 'AR-M': 'Mendoza', 'AR-N': 'Misiones', 'AR-Q': 'Neuquén',
+  'AR-R': 'Río Negro', 'AR-A': 'Salta', 'AR-J': 'San Juan', 'AR-D': 'San Luis',
+  'AR-Z': 'Santa Cruz', 'AR-S': 'Santa Fe', 'AR-G': 'Santiago del Estero',
+  'AR-V': 'Tierra del Fuego', 'AR-T': 'Tucumán',
+};
+
 // Country code to states/regions mapping
 export const countryStatesMap: Record<string, Record<string, string>> = {
   'US': usStates,
@@ -150,6 +255,18 @@ export const countryStatesMap: Record<string, Record<string, string>> = {
   'ES': spanishRegions,
   'JP': japanesePrefectures,
   'CN': chineseProvinces,
+  'IE': irishCounties,
+  'NL': netherlandsProvinces,
+  'CH': swissCantons,
+  'AT': austrianStates,
+  'BE': belgianProvinces,
+  'PL': polishVoivodeships,
+  'PT': portugueseDistricts,
+  'GR': greekRegions,
+  'KR': southKoreanProvinces,
+  'NZ': newZealandRegions,
+  'TH': thaiRegions,
+  'AR': argentineProvinces,
 };
 
 // Countries that support state-level tracking
@@ -160,11 +277,46 @@ export const getStatesForCountry = (countryCode: string): Record<string, string>
   return countryStatesMap[countryCode] || null;
 };
 
+// Get region label for a country
+export const getRegionLabel = (countryCode: string): string => {
+  const labels: Record<string, string> = {
+    'US': 'States',
+    'CA': 'Provinces',
+    'AU': 'States',
+    'BR': 'States',
+    'MX': 'States',
+    'IN': 'States',
+    'DE': 'States',
+    'GB': 'Countries',
+    'FR': 'Regions',
+    'IT': 'Regions',
+    'ES': 'Communities',
+    'JP': 'Prefectures',
+    'CN': 'Provinces',
+    'IE': 'Counties',
+    'NL': 'Provinces',
+    'CH': 'Cantons',
+    'AT': 'States',
+    'BE': 'Provinces',
+    'PL': 'Voivodeships',
+    'PT': 'Districts',
+    'GR': 'Regions',
+    'KR': 'Provinces',
+    'NZ': 'Regions',
+    'TH': 'Regions',
+    'AR': 'Provinces',
+  };
+  return labels[countryCode] || 'Regions';
+};
+
 // Get country code from country name
 export const countryNameToCode: Record<string, string> = {
   'United States': 'US', 'Canada': 'CA', 'Australia': 'AU', 'Brazil': 'BR',
   'Mexico': 'MX', 'India': 'IN', 'Germany': 'DE', 'United Kingdom': 'GB',
   'France': 'FR', 'Italy': 'IT', 'Spain': 'ES', 'Japan': 'JP', 'China': 'CN',
+  'Ireland': 'IE', 'Netherlands': 'NL', 'Switzerland': 'CH', 'Austria': 'AT',
+  'Belgium': 'BE', 'Poland': 'PL', 'Portugal': 'PT', 'Greece': 'GR',
+  'South Korea': 'KR', 'New Zealand': 'NZ', 'Thailand': 'TH', 'Argentina': 'AR',
 };
 
 // Map center coordinates for each country
@@ -182,4 +334,16 @@ export const countryMapCenters: Record<string, { center: [number, number]; zoom:
   'ES': { center: [-3.7, 40.5], zoom: 5 },
   'JP': { center: [138.3, 36.2], zoom: 5 },
   'CN': { center: [104.2, 35.9], zoom: 3.5 },
+  'IE': { center: [-8.0, 53.5], zoom: 6 },
+  'NL': { center: [5.3, 52.2], zoom: 7 },
+  'CH': { center: [8.2, 46.8], zoom: 7 },
+  'AT': { center: [14.5, 47.5], zoom: 6 },
+  'BE': { center: [4.5, 50.5], zoom: 7 },
+  'PL': { center: [19.1, 51.9], zoom: 5.5 },
+  'PT': { center: [-8.2, 39.4], zoom: 6 },
+  'GR': { center: [21.8, 39.1], zoom: 6 },
+  'KR': { center: [127.8, 35.9], zoom: 6 },
+  'NZ': { center: [174.9, -40.9], zoom: 5 },
+  'TH': { center: [100.5, 13.8], zoom: 5 },
+  'AR': { center: [-63.6, -38.4], zoom: 4 },
 };

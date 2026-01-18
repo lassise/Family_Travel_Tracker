@@ -3,10 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MapPin, CheckCircle2, XCircle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { MapPin, CheckCircle2, XCircle, Search } from 'lucide-react';
 import { useStateVisits } from '@/hooks/useStateVisits';
 import { useFamilyData, Country } from '@/hooks/useFamilyData';
-import { getStatesForCountry, countryNameToCode } from '@/lib/statesData';
+import { getStatesForCountry, countryNameToCode, getRegionLabel } from '@/lib/statesData';
 import StateGridSelector from './StateGridSelector';
 import CountryFlag from '@/components/common/CountryFlag';
 import { getEffectiveFlagCode } from '@/lib/countriesData';
@@ -20,6 +21,7 @@ interface StateMapDialogProps {
 const StateMapDialog = ({ open, onOpenChange, country }: StateMapDialogProps) => {
   const [selectedStates, setSelectedStates] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { familyMembers } = useFamilyData();
   const countryCode = country ? countryNameToCode[country.name] : null;
@@ -30,6 +32,20 @@ const StateMapDialog = ({ open, onOpenChange, country }: StateMapDialogProps) =>
     return getStatesForCountry(countryCode);
   }, [countryCode]);
 
+  const filteredStates = useMemo(() => {
+    if (!states) return null;
+    if (!searchQuery.trim()) return states;
+    
+    const query = searchQuery.toLowerCase();
+    const filtered: Record<string, string> = {};
+    Object.entries(states).forEach(([code, name]) => {
+      if (name.toLowerCase().includes(query) || code.toLowerCase().includes(query)) {
+        filtered[code] = name;
+      }
+    });
+    return filtered;
+  }, [states, searchQuery]);
+
   const visitedStateCodes = useMemo(() => {
     return new Set(stateVisits.map(sv => sv.state_code));
   }, [stateVisits]);
@@ -38,6 +54,13 @@ const StateMapDialog = ({ open, onOpenChange, country }: StateMapDialogProps) =>
   useEffect(() => {
     setSelectedStates(visitedStateCodes);
   }, [visitedStateCodes]);
+
+  // Reset search when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('');
+    }
+  }, [open]);
 
   const handleStateToggle = (stateCode: string) => {
     setSelectedStates(prev => {
@@ -89,13 +112,23 @@ const StateMapDialog = ({ open, onOpenChange, country }: StateMapDialogProps) =>
   };
 
   const handleSelectAll = () => {
-    if (states) {
-      setSelectedStates(new Set(Object.keys(states)));
+    if (filteredStates) {
+      setSelectedStates(prev => {
+        const newSet = new Set(prev);
+        Object.keys(filteredStates).forEach(code => newSet.add(code));
+        return newSet;
+      });
     }
   };
 
   const handleClearAll = () => {
-    setSelectedStates(new Set());
+    if (filteredStates) {
+      setSelectedStates(prev => {
+        const newSet = new Set(prev);
+        Object.keys(filteredStates).forEach(code => newSet.delete(code));
+        return newSet;
+      });
+    }
   };
 
   if (!country || !countryCode || !states) {
@@ -107,7 +140,7 @@ const StateMapDialog = ({ open, onOpenChange, country }: StateMapDialogProps) =>
   const totalCount = stateEntries.length;
   const progressPercent = Math.round((visitedCount / totalCount) * 100);
 
-  const regionLabel = countryCode === 'US' ? 'States' : 'Regions';
+  const regionLabel = getRegionLabel(countryCode);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -137,64 +170,83 @@ const StateMapDialog = ({ open, onOpenChange, country }: StateMapDialogProps) =>
         </DialogHeader>
 
         <div className="px-6 py-4">
-          {/* Stats Bar */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <Badge 
-                variant="default" 
-                className="text-sm px-3 py-1 bg-emerald-500 hover:bg-emerald-600"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                {visitedCount} / {totalCount} {regionLabel}
-              </Badge>
-              
-              {/* Progress Bar */}
-              <div className="hidden sm:flex items-center gap-2 min-w-[200px]">
-                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-                <span className="text-xs font-medium text-muted-foreground w-10">
-                  {progressPercent}%
-                </span>
-              </div>
+          {/* Search and Stats Bar */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={`Search ${regionLabel.toLowerCase()}...`}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9"
+              />
             </div>
-            
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleSelectAll}
-                className="text-xs"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                All
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleClearAll}
-                className="text-xs"
-              >
-                <XCircle className="h-3.5 w-3.5 mr-1.5" />
-                Clear
-              </Button>
+
+            <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+              <div className="flex items-center gap-4">
+                <Badge 
+                  variant="default" 
+                  className="text-sm px-3 py-1 bg-emerald-500 hover:bg-emerald-600"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                  {visitedCount} / {totalCount}
+                </Badge>
+                
+                {/* Progress Bar */}
+                <div className="hidden md:flex items-center gap-2 min-w-[120px]">
+                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-muted-foreground w-10">
+                    {progressPercent}%
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSelectAll}
+                  className="text-xs"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                  All
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearAll}
+                  className="text-xs"
+                >
+                  <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                  Clear
+                </Button>
+              </div>
             </div>
           </div>
 
           {/* State Grid */}
-          <ScrollArea className="h-[calc(90vh-280px)] min-h-[300px]">
+          <ScrollArea className="h-[calc(90vh-320px)] min-h-[300px]">
             <div className="pr-4">
-              <StateGridSelector
-                states={states}
-                selectedStates={selectedStates}
-                onStateToggle={handleStateToggle}
-                countryCode={countryCode}
-              />
+              {filteredStates && Object.keys(filteredStates).length > 0 ? (
+                <StateGridSelector
+                  states={filteredStates}
+                  selectedStates={selectedStates}
+                  onStateToggle={handleStateToggle}
+                  countryCode={countryCode}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-32 text-muted-foreground">
+                  No {regionLabel.toLowerCase()} found matching "{searchQuery}"
+                </div>
+              )}
             </div>
           </ScrollArea>
         </div>
@@ -202,7 +254,7 @@ const StateMapDialog = ({ open, onOpenChange, country }: StateMapDialogProps) =>
         {/* Footer */}
         <div className="px-6 py-4 border-t bg-muted/30 flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
-            Click on a {regionLabel.toLowerCase().slice(0, -1)} to toggle visited status
+            Click on a {regionLabel.toLowerCase().replace(/s$/, '')} to toggle visited status
           </p>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
