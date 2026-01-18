@@ -14,6 +14,7 @@ import { getAllCountries, getRegionCode } from "@/lib/countriesData";
 import { cn } from "@/lib/utils";
 import CountryFlag from "./common/CountryFlag";
 import CountryFilters from "./travel/CountryFilters";
+import DeleteConfirmDialog from "./common/DeleteConfirmDialog";
 
 interface CountryTrackerProps {
   countries: Country[];
@@ -28,6 +29,12 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
   const [selectedContinent, setSelectedContinent] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; countryId: string; countryName: string }>({
+    open: false,
+    countryId: '',
+    countryName: ''
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Get unique continents and years from countries
   const { continents, years } = useMemo(() => {
@@ -130,19 +137,27 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
     }
   };
 
-  const handleDelete = async (countryId: string, countryName: string) => {
-    if (!confirm(`Are you sure you want to delete ${countryName}?`)) return;
+  const handleDeleteClick = (countryId: string, countryName: string) => {
+    setDeleteDialog({ open: true, countryId, countryName });
+  };
 
-    const { error } = await supabase
-      .from("countries")
-      .delete()
-      .eq("id", countryId);
+  const handleDeleteConfirm = async () => {
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("countries")
+        .delete()
+        .eq("id", deleteDialog.countryId);
 
-    if (error) {
-      toast({ title: "Error deleting country", variant: "destructive" });
-    } else {
-      toast({ title: `${countryName} deleted successfully` });
-      onUpdate();
+      if (error) {
+        toast({ title: "Error deleting country", variant: "destructive" });
+      } else {
+        toast({ title: `${deleteDialog.countryName} deleted successfully` });
+        onUpdate();
+      }
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialog({ open: false, countryId: '', countryName: '' });
     }
   };
 
@@ -305,12 +320,15 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
                           countryName={country.name}
                           countryCode={countryCode}
                           onUpdate={handleUpdate}
-                          buttonLabel="View Trips"
+                          buttonLabel="View / Add Trips"
                         />
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleDelete(country.id, country.name)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(country.id, displayName);
+                          }}
                           className="text-destructive hover:text-destructive"
                         >
                           <Trash2 className="w-4 h-4 mr-1" />
@@ -324,6 +342,16 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
             );
           })}
         </div>
+
+        <DeleteConfirmDialog
+          open={deleteDialog.open}
+          onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+          onConfirm={handleDeleteConfirm}
+          title="Delete Country"
+          description={`Are you sure you want to delete this country? This action cannot be undone.`}
+          itemName={deleteDialog.countryName}
+          loading={isDeleting}
+        />
       </div>
     </section>
   );
