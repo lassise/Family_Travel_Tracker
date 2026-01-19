@@ -74,6 +74,10 @@ export interface ScoredFlight extends FlightResult {
   passengers?: number;
   priceInsight?: PriceInsight;
   matchExplanation?: MatchExplanation;
+  isAvoidedAirline?: boolean;
+  isPreferredAirline?: boolean;
+  scorePenalty?: number;
+  scoreBoost?: number;
 }
 
 export interface ScoreBreakdown {
@@ -1117,6 +1121,10 @@ export const scoreFlights = (
       pricePerTicket,
       passengers: totalPassengers,
       priceInsight,
+      isAvoidedAirline: isAvoidedAirlineFlight,
+      isPreferredAirline: isPreferredAirlineFlight,
+      scorePenalty: isAvoidedAirlineFlight ? AVOIDED_AIRLINE_PENALTY : undefined,
+      scoreBoost: isPreferredAirlineFlight ? PREFERRED_AIRLINE_BOOST : undefined,
     };
 
     // Explanation will be set after sorting

@@ -471,11 +471,31 @@ export const FlightLegResults = ({
                     !isSelected && !isAvoided && "hover:border-primary/50"
                   )}
                 >
-                  {/* Avoided warning */}
-                  {isAvoided && (
-                    <div className="flex items-center gap-1 px-3 pt-2 text-xs text-red-600 dark:text-red-400">
-                      <AlertTriangle className="h-3 w-3" />
-                      <span>This airline is on your avoid list</span>
+                  {/* Avoided warning with penalty indicator */}
+                  {(isAvoided || flight.isAvoidedAirline) && (
+                    <div className="flex items-center justify-between gap-2 px-3 pt-2 bg-red-100/50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
+                      <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <span className="font-medium">This airline is on your avoid list</span>
+                      </div>
+                      <Badge variant="destructive" className="text-[10px] gap-1">
+                        <TrendingDown className="h-2.5 w-2.5" />
+                        -{flight.scorePenalty || 50} pts penalty
+                      </Badge>
+                    </div>
+                  )}
+                  
+                  {/* Preferred airline boost indicator */}
+                  {flight.isPreferredAirline && !isAvoided && !flight.isAvoidedAirline && (
+                    <div className="flex items-center justify-between gap-2 px-3 pt-2 bg-emerald-100/50 dark:bg-emerald-900/20 border-b border-emerald-200 dark:border-emerald-800">
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                        <Star className="h-3.5 w-3.5 fill-current" />
+                        <span className="font-medium">Your preferred airline</span>
+                      </div>
+                      <Badge className="text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-600">
+                        <TrendingUp className="h-2.5 w-2.5" />
+                        +{flight.scoreBoost || 20} pts boost
+                      </Badge>
                     </div>
                   )}
 
