@@ -330,14 +330,15 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
 
   // Handle country click from map
   const handleCountryClick = useCallback(async (iso3: string) => {
-    // Check if this country is visited
+    // Check if this country is visited or is the home country
     const isVisited = visitedCountries.includes(iso3);
+    const isHome = iso3 === homeCountryISO;
     
-    if (isVisited) {
-      // Visited countries go directly to state selection
+    if (isVisited || isHome) {
+      // Visited countries and home country go directly to state selection
       await openStateTrackingDialogForIso3(iso3);
     } else {
-      // Unvisited countries show the quick action dialog (wishlist or cancel)
+      // Unvisited countries show the quick action dialog (add visited, wishlist, etc.)
       const iso2 = iso3ToIso2[iso3];
       const allCountriesList = getAllCountries();
       // Try to find by ISO2 code first, then by name
@@ -352,7 +353,7 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
       });
       setQuickActionOpen(true);
     }
-  }, [openStateTrackingDialogForIso3, visitedCountries]);
+  }, [openStateTrackingDialogForIso3, visitedCountries, homeCountryISO]);
 
   // Check if clicked country is the home country
   const isClickedCountryHomeCountry = useMemo(() => {
