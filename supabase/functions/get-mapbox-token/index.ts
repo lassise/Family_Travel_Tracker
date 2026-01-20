@@ -12,36 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    // Require authentication
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(
-        JSON.stringify({ error: 'Authentication required' }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-
-    // Create Supabase admin client to verify the token
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
-    // Verify the JWT by getting the user
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    
-    if (authError || !user) {
-      console.error('Auth error:', authError);
-      return new Response(
-        JSON.stringify({ error: 'Invalid authentication token' }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const mapboxToken = Deno.env.get("MAPBOX_PUBLIC_TOKEN");
-    
     if (!mapboxToken) {
       return new Response(
         JSON.stringify({ error: "Mapbox token not configured" }),
@@ -49,13 +20,35 @@ serve(async (req) => {
       );
     }
 
+    // Mapbox public token is safe to return without auth.
+    // We still attempt a lightweight auth verification when a Bearer token is present,
+    // but we will NOT block map rendering if verification fails.
+    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+    if (authHeader) {
+      const [scheme, jwt] = authHeader.split(/\s+/);
+      if (scheme === "Bearer" && jwt) {
+        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+        const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+
+        if (serviceRoleKey && supabaseUrl) {
+          try {
+            const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+            const { error } = await supabaseAdmin.auth.getUser(jwt);
+            if (error) console.warn("Auth verify failed (non-blocking):", error);
+          } catch (e) {
+            console.warn("Auth verify threw (non-blocking):", e);
+          }
+        }
+      }
+    }
+
     return new Response(
       JSON.stringify({ token: mapboxToken }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
-    console.error('Error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("get-mapbox-token error:", message);
     return new Response(
       JSON.stringify({ error: message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
