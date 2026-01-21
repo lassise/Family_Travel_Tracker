@@ -209,10 +209,16 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
 
             // Derive ISO2 code: check stored flag if it's a code, then name prefix, then lookup
             // Also check for region codes like GB-SCT for Scotland
-            const storedFlag = (country.flag || "").trim().toUpperCase();
+            const rawFlag = (country.flag || "").trim();
+            const storedFlag = rawFlag.toUpperCase();
             const isStoredFlagACode = /^[A-Z]{2}(-[A-Z]{3})?$/.test(storedFlag);
+
+            // Scotland safeguard: if the stored emoji itself is the Scotland flag, always use GB-SCT
+            const isScotlandEmoji = rawFlag.includes("🏴");
+
             const regionCode = getRegionCode(displayName) || getRegionCode(country.name);
             const countryCode = (
+              (isScotlandEmoji ? "GB-SCT" : "") ||
               (isStoredFlagACode ? storedFlag : "") || 
               regionCode ||
               codeFromName || 
