@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, X, Globe, Check, ChevronsUpDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { getAllCountries, type CountryOption } from "@/lib/countriesData";
+import { getAllCountries, type CountryOption, getEffectiveFlagCode } from "@/lib/countriesData";
 import {
   Command,
   CommandEmpty,
@@ -23,6 +23,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import CountryFlag from "@/components/common/CountryFlag";
 
 interface CountriesStepProps {
   familyMembers: Array<{ id: string; name: string }>;
@@ -202,7 +203,16 @@ const CountriesStep = ({ familyMembers }: CountriesStepProps) => {
                               selectedCountry?.name === country.name ? "opacity-100" : "opacity-0"
                             )}
                           />
-                          <span className="mr-2">{country.flag}</span>
+                          {(() => {
+                            const { code, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
+                            return (
+                              <span className="mr-2 inline-flex items-center">
+                                {isSubdivision || code ? (
+                                  <CountryFlag countryCode={code} countryName={country.name} size="sm" />
+                                ) : null}
+                              </span>
+                            );
+                          })()}
                           <span>{country.name}</span>
                           <span className="ml-auto text-xs text-muted-foreground">
                             {country.continent}
@@ -268,7 +278,14 @@ const CountriesStep = ({ familyMembers }: CountriesStepProps) => {
                 <Card key={country.id}>
                   <CardContent className="p-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-xl">{country.flag}</span>
+                      <span className="inline-flex items-center">
+                        {(() => {
+                          const { code, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
+                          return isSubdivision || code ? (
+                            <CountryFlag countryCode={code} countryName={country.name} size="sm" />
+                          ) : null;
+                        })()}
+                      </span>
                       <div>
                         <p className="font-medium">{country.name}</p>
                         <p className="text-xs text-muted-foreground">{country.continent}</p>

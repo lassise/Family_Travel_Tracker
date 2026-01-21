@@ -9,6 +9,8 @@ import { Country } from '@/hooks/useFamilyData';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Camera, Plus, X, Image as ImageIcon, Upload } from 'lucide-react';
+import { getEffectiveFlagCode } from '@/lib/countriesData';
+import CountryFlag from '@/components/common/CountryFlag';
 
 interface PhotoGalleryProps {
   countries: Country[];
@@ -107,7 +109,8 @@ const PhotoGallery = ({ countries }: PhotoGalleryProps) => {
 
   const getCountryName = (countryId: string) => {
     const country = countries.find(c => c.id === countryId);
-    return country ? `${country.flag} ${country.name}` : 'Unknown';
+    // Avoid relying on stored emoji flags; just return the country name
+    return country ? country.name : 'Unknown';
   };
 
   return (
@@ -136,11 +139,19 @@ const PhotoGallery = ({ countries }: PhotoGalleryProps) => {
                     <SelectValue placeholder="Select a country" />
                   </SelectTrigger>
                   <SelectContent>
-                    {visitedCountries.map((country) => (
-                      <SelectItem key={country.id} value={country.id}>
-                        {country.flag} {country.name}
-                      </SelectItem>
-                    ))}
+                    {visitedCountries.map((country) => {
+                      const { code, isSubdivision } = getEffectiveFlagCode(country.name, country.flag);
+                      return (
+                        <SelectItem key={country.id} value={country.id}>
+                          <span className="inline-flex items-center gap-2">
+                            {isSubdivision || code ? (
+                              <CountryFlag countryCode={code} countryName={country.name} size="sm" />
+                            ) : null}
+                            <span>{country.name}</span>
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
