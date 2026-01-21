@@ -192,18 +192,20 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
   // Use resolved home country ISO3 for map coloring
   const homeCountryISO = resolvedHome.iso3;
 
+  // Precompute full country list once to avoid repeated lookups
+  const allCountriesList = useMemo(() => getAllCountries(), []);
+
   // Countries that support state-level tracking (all countries with subdivisions)
   const countriesWithStateTracking = useMemo(
     () =>
       countries.filter((c) => {
-        const allCountriesList = getAllCountries();
         const match = allCountriesList.find(ac => ac.name === c.name);
         const code = match?.code;
         const isHome = resolvedHome.isHomeCountry(c.name);
         const isVisited = c.visitedBy.length > 0;
         return (isVisited || isHome) && code && countryHasSubdivisions(code);
       }),
-    [countries, resolvedHome]
+    [countries, resolvedHome, allCountriesList]
   );
 
   const wishlistCountries = useMemo(
@@ -398,10 +400,18 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
 
   useEffect(() => {
     const fetchToken = async () => {
+      const fallbackToken = import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN;
+
       try {
         const { data: { session } } = await supabase.auth.getSession();
+
+        // If no session (e.g., anonymous visitor or auth glitch), still try with fallback env token.
         if (!session) {
-          console.error('No session found for Mapbox token fetch');
+          if (fallbackToken) {
+            setMapToken(fallbackToken);
+          } else {
+            console.error('No session found for Mapbox token fetch and no fallback token configured');
+          }
           return;
         }
         
@@ -414,9 +424,20 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
         const data = await response.json();
         if (data.token) {
           setMapToken(data.token);
+          return;
+        }
+
+        // If function did not return a token, fall back to env token to avoid a blank map.
+        if (fallbackToken) {
+          console.warn('Mapbox function did not return token, using fallback env token');
+          setMapToken(fallbackToken);
         }
       } catch (error) {
         console.error('Error fetching Mapbox token:', error);
+        // Last-resort fallback to env token to keep map rendering
+        if (fallbackToken) {
+          setMapToken(fallbackToken);
+        }
       }
     };
     fetchToken();
@@ -668,6 +689,29 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
     };
   }, [isMapReady]);
 
+  // Re-apply colors/filters whenever the style data updates (covers style reloads or delayed source load)
+  useEffect(() => {
+    if (!map.current || !isMapReady) return;
+
+    const reapply = () => {
+      try {
+        map.current?.setFilter('home-country', homeCountryISO ? ['==', 'iso_3166_1_alpha_3', homeCountryISO] : ['in', 'iso_3166_1_alpha_3', '']);
+        map.current?.setFilter('visited-countries', ['in', 'iso_3166_1_alpha_3', ...visitedCountries]);
+        map.current?.setFilter('wishlist-countries', ['in', 'iso_3166_1_alpha_3', ...wishlistCountries]);
+        map.current?.setPaintProperty('home-country', 'fill-color', validateColor(mapColors.home, defaultMapColors.home));
+        map.current?.setPaintProperty('visited-countries', 'fill-color', validateColor(mapColors.visited, defaultMapColors.visited));
+        map.current?.setPaintProperty('wishlist-countries', 'fill-color', validateColor(mapColors.wishlist, defaultMapColors.wishlist));
+      } catch (err) {
+        console.warn('Failed to reapply map styles after styledata event:', err);
+      }
+    };
+
+    map.current.on('styledata', reapply);
+    return () => {
+      map.current?.off('styledata', reapply);
+    };
+  }, [isMapReady, homeCountryISO, visitedCountries, wishlistCountries, mapColors]);
+
   // Update filters when countries change (without re-creating map)
   useEffect(() => {
     if (!map.current || !isMapReady) return;
@@ -790,7 +834,6 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
           <div className="flex flex-wrap gap-2">
             {countriesWithStateTracking.length > 0 ? (
               countriesWithStateTracking.map(country => {
-                const allCountriesList = getAllCountries();
                 const match = allCountriesList.find(ac => ac.name === country.name);
                 const code = match?.code || '';
                 const states = getSubdivisionsForCountry(code);

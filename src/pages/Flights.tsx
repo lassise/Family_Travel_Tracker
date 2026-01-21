@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { scoreFlights, categorizeFlights, type ScoredFlight, type FlightResult, type PassengerBreakdown } from "@/lib/flightScoring";
 import { searchAirports, MAJOR_US_AIRLINES, INTERNATIONAL_AIRLINES, AIRLINES, type Airport } from "@/lib/airportsData";
+import { runFlightAvoidanceSelfTest } from "@/lib/flightAvoidanceSelfTest";
 
 const DEPARTURE_TIMES = [{
   value: "early_morning",
@@ -254,6 +255,16 @@ const Flights = () => {
     }
   }, [tripType, outboundSelected, isReturnPending, searchReturnLeg]);
 
+  // Dev-only: validate avoided-airline logic with a reproducible scenario.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    try {
+      runFlightAvoidanceSelfTest();
+    } catch {
+      // Error already logged; keep UI usable in dev.
+    }
+  }, []);
+
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
@@ -374,9 +385,31 @@ const Flights = () => {
   };
 
   const isAvoidedAirline = (airlineCode: string): boolean => {
-    const airline = AIRLINES.find(a => airlineCode.startsWith(a.code) || airlineCode === a.name);
+    if (!airlineCode) return false;
+
+    const raw = airlineCode.trim();
+    const rawUpper = raw.toUpperCase();
+
+    // First: allow direct code matching even if we can't map to a known airline
+    // (e.g. user stores "NK" / "F9" or API returns a code we don't have in AIRLINES)
+    if (
+      preferences.avoided_airlines.some((avoided) => {
+        const a = (avoided || "").trim();
+        if (!a) return false;
+        const aUpper = a.toUpperCase();
+        return rawUpper === aUpper || rawUpper.startsWith(aUpper);
+      })
+    ) {
+      return true;
+    }
+
+    // Fallback: match via known airline mapping by name or code
+    const airline = AIRLINES.find((a) => rawUpper.startsWith(a.code) || raw === a.name);
     if (!airline) return false;
-    return preferences.avoided_airlines.includes(airline.name) || preferences.avoided_airlines.includes(airline.code);
+    return (
+      preferences.avoided_airlines.includes(airline.name) ||
+      preferences.avoided_airlines.includes(airline.code)
+    );
   };
 
   // Handle flight selection

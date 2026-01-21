@@ -180,11 +180,24 @@ export const FlightLegResults = ({
   const displayedFlights = showAll ? sortedFlights : sortedFlights.slice(0, 5);
 
   // Quick categories
-  const bestOverall = flights[0];
-  const cheapest = flights.length > 0 ? [...flights].sort((a, b) => a.price - b.price)[0] : null;
+  const nonAvoidedFlights = useMemo(
+    () =>
+      sortedFlights.filter((f) => {
+        const code = f.itineraries[0]?.segments[0]?.airline || "";
+        return !(isAvoidedAirline(code) || f.isAvoidedAirline);
+      }),
+    [sortedFlights, isAvoidedAirline]
+  );
+
+  // Prefer to feature non-avoided flights in the top badges; fall back if all are avoided.
+  const featuredFlights = nonAvoidedFlights.length > 0 ? nonAvoidedFlights : sortedFlights;
+
+  const bestOverall = featuredFlights[0];
+  const cheapest =
+    featuredFlights.length > 0 ? [...featuredFlights].sort((a, b) => a.price - b.price)[0] : null;
   const fastest =
-    flights.length > 0
-      ? [...flights].sort((a, b) => {
+    featuredFlights.length > 0
+      ? [...featuredFlights].sort((a, b) => {
           const aDur = a.itineraries.reduce(
             (sum, it) =>
               sum +
