@@ -162,7 +162,20 @@ const scoreDepartureTime = (hour: number, preferences: FlightPreferences): numbe
 
 // Check if an airline is in the avoided list (by code or name)
 const isAvoidedAirline = (airlineCode: string, preferences: FlightPreferences): boolean => {
-  const airline = AIRLINES.find(a => airlineCode.startsWith(a.code) || airlineCode === a.name);
+  if (!airlineCode) return false;
+  
+  const normalizedCode = airlineCode.trim().toUpperCase();
+  
+  // First, check if the raw code itself is in the avoided list (e.g., "NK", "F9")
+  if (preferences.avoided_airlines.some(avoided => {
+    const normalizedAvoided = (avoided || "").trim().toUpperCase();
+    return normalizedCode === normalizedAvoided || normalizedCode.startsWith(normalizedAvoided);
+  })) {
+    return true;
+  }
+  
+  // Then check via airline lookup
+  const airline = AIRLINES.find(a => normalizedCode.startsWith(a.code) || normalizedCode === a.name.toUpperCase());
   if (!airline) return false;
   
   // Check if the airline name OR code is in the avoided list
@@ -181,22 +194,36 @@ const scoreAirlineReliability = (airlineCode: string, preferences: FlightPrefere
   let isAvoided = false;
   let isPreferred = false;
 
-  // Check for preferred airlines
-  if (airline && preferences.preferred_airlines.includes(airline.name)) {
+  // Normalize code for direct matching
+  const normalizedCode = (airlineCode || "").trim().toUpperCase();
+  
+  // Check for preferred airlines by both name and code
+  if (airline && (preferences.preferred_airlines.includes(airline.name) || preferences.preferred_airlines.includes(airline.code))) {
     score = Math.min(100, score + 20); // Stronger boost for preferred airlines
     isPreferred = true;
   }
+  
+  // Also check preferred airlines by code directly (e.g., user saves "NK", API returns "NK123")
+  if (!isPreferred && preferences.preferred_airlines.some(preferred => {
+    const normalizedPreferred = (preferred || "").trim().toUpperCase();
+    return normalizedCode === normalizedPreferred || normalizedCode.startsWith(normalizedPreferred);
+  })) {
+    score = Math.min(100, score + 20);
+    isPreferred = true;
+  }
 
-  // Check for avoided airlines - by name or code
+  // Check for avoided airlines - by name or code via airline lookup
   if (airline && (preferences.avoided_airlines.includes(airline.name) || preferences.avoided_airlines.includes(airline.code))) {
     score = 0; // Zero out the reliability score
     isAvoided = true;
   }
 
-  // Check by code directly (e.g., "NK", "F9")
-  if (preferences.avoided_airlines.some(avoided => 
-    airlineCode.startsWith(avoided) || airlineCode === avoided
-  )) {
+  // Check avoided airlines by code directly (e.g., "NK", "F9") - case-insensitive
+  // This handles cases where airline lookup fails or user saved code directly
+  if (!isAvoided && preferences.avoided_airlines.some(avoided => {
+    const normalizedAvoided = (avoided || "").trim().toUpperCase();
+    return normalizedCode === normalizedAvoided || normalizedCode.startsWith(normalizedAvoided);
+  })) {
     score = 0;
     isAvoided = true;
   }
@@ -1000,8 +1027,17 @@ export const scoreFlights = (
     }
     
     const airline = getAirlineCached(firstSegment?.airline || "");
-    if (airline && preferences.preferred_airlines.includes(airline.name)) {
+    const airlineCode = firstSegment?.airline || "";
+    // Check preferred airlines by both name and code
+    if (airline && (preferences.preferred_airlines.includes(airline.name) || preferences.preferred_airlines.includes(airline.code))) {
       preferenceMatches.push({ type: "positive", label: `${airline.name}`, detail: "Your preferred airline" });
+    } else if (airlineCode && preferences.preferred_airlines.some(preferred => {
+      // Also check by code directly in case airline wasn't found in lookup
+      const normalizedPreferred = (preferred || "").trim().toUpperCase();
+      const normalizedCode = airlineCode.trim().toUpperCase();
+      return normalizedCode === normalizedPreferred || normalizedCode.startsWith(normalizedPreferred);
+    })) {
+      preferenceMatches.push({ type: "positive", label: `Airline ${airlineCode}`, detail: "Your preferred airline" });
     }
     
     if (breakdown.airlineReliability > 85) {
@@ -1046,8 +1082,19 @@ export const scoreFlights = (
       preferenceMatches.push({ type: "negative", label: "Red-eye flight", detail: "You prefer to avoid" });
     }
     
-    if (airline && preferences.avoided_airlines.includes(airline.name)) {
+    // Check avoided airlines by both name and code
+    if (airline && (preferences.avoided_airlines.includes(airline.name) || preferences.avoided_airlines.includes(airline.code))) {
       preferenceMatches.push({ type: "negative", label: `${airline.name}`, detail: "Airline you avoid" });
+    }
+    // Also check by code directly in case airline wasn't found in lookup
+    const airlineCode = firstSegment?.airline || "";
+    if (airlineCode && preferences.avoided_airlines.some(avoided => {
+      const normalizedAvoided = (avoided || "").trim().toUpperCase();
+      const normalizedCode = airlineCode.trim().toUpperCase();
+      return normalizedCode === normalizedAvoided || normalizedCode.startsWith(normalizedAvoided);
+    }) && !airline) {
+      // Only add if we haven't already added it above
+      preferenceMatches.push({ type: "negative", label: `Airline code ${airlineCode}`, detail: "Airline you avoid" });
     }
     
     if (breakdown.layoverQuality < 60) {
@@ -1137,18 +1184,29 @@ export const scoreFlights = (
     scoredFlights[index] = scoredFlight;
   }
 
-  // Sort by score descending
-  scoredFlights.sort((a, b) => b.score - a.score);
+  // Sort by score descending, but put avoided airlines at the bottom regardless of score
+  scoredFlights.sort((a, b) => {
+    // Avoided airlines always go to the bottom
+    if (a.isAvoidedAirline && !b.isAvoidedAirline) return 1;
+    if (!a.isAvoidedAirline && b.isAvoidedAirline) return -1;
+    // Within same category (both avoided or both not avoided), sort by score
+    return b.score - a.score;
+  });
   
   // Now assign rankings and explanations based on sorted order
-  const topScore = scoredFlights[0]?.score || 0;
+  // Only consider non-avoided flights for "best" ranking
+  const nonAvoidedFlights = scoredFlights.filter(f => !f.isAvoidedAirline);
+  const topScore = (nonAvoidedFlights[0]?.score || scoredFlights[0]?.score) || 0;
   
   for (let i = 0; i < scoredFlights.length; i++) {
     const flight = scoredFlights[i];
     const scoreDiff = topScore - flight.score;
     
     let ranking: FlightRanking;
-    if (i === 0) {
+    // Avoided airlines should never get "best" ranking, even if they're first in the list
+    if (flight.isAvoidedAirline) {
+      ranking = "not_recommended";
+    } else if (i === 0 || (nonAvoidedFlights.length > 0 && flight === nonAvoidedFlights[0])) {
       ranking = "best";
     } else if (scoreDiff <= 10) {
       ranking = "good_alternative";
@@ -1175,19 +1233,28 @@ export const categorizeFlights = (scoredFlights: ScoredFlight[]): {
     return { bestOverall: null, fastest: null, cheapest: null, bestForFamilies: null };
   }
 
-  let fastest = scoredFlights[0];
-  let cheapest = scoredFlights[0];
-  let bestForFamilies = scoredFlights[0];
+  // Filter out avoided airlines for "best" categories, but include them for fastest/cheapest
+  // (since user might want to see cheapest even if avoided)
+  const nonAvoidedFlights = scoredFlights.filter(f => !f.isAvoidedAirline);
+  const flightsForBest = nonAvoidedFlights.length > 0 ? nonAvoidedFlights : scoredFlights;
+
+  let fastest = flightsForBest[0];
+  let cheapest = scoredFlights[0]; // Cheapest can be avoided (user might want to see it)
+  let bestForFamilies = flightsForBest[0];
 
   for (let i = 1; i < scoredFlights.length; i++) {
     const f = scoredFlights[i];
-    if (f.breakdown.travelTime > fastest.breakdown.travelTime) fastest = f;
     if (f.price < cheapest.price) cheapest = f;
+  }
+
+  for (let i = 1; i < flightsForBest.length; i++) {
+    const f = flightsForBest[i];
+    if (f.breakdown.travelTime > fastest.breakdown.travelTime) fastest = f;
     if ((f.familyStressScore || 100) < (bestForFamilies.familyStressScore || 100)) bestForFamilies = f;
   }
 
   return { 
-    bestOverall: scoredFlights[0], 
+    bestOverall: flightsForBest[0] || null, 
     fastest, 
     cheapest, 
     bestForFamilies 

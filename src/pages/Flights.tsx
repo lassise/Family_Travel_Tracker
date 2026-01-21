@@ -392,24 +392,36 @@ const Flights = () => {
 
     // First: allow direct code matching even if we can't map to a known airline
     // (e.g. user stores "NK" / "F9" or API returns a code we don't have in AIRLINES)
+    // Check both exact match and prefix match (e.g., "NK123" matches "NK")
     if (
       preferences.avoided_airlines.some((avoided) => {
         const a = (avoided || "").trim();
         if (!a) return false;
         const aUpper = a.toUpperCase();
-        return rawUpper === aUpper || rawUpper.startsWith(aUpper);
+        // Exact match or code prefix match
+        return rawUpper === aUpper || rawUpper.startsWith(aUpper) || aUpper.startsWith(rawUpper);
       })
     ) {
       return true;
     }
 
     // Fallback: match via known airline mapping by name or code
-    const airline = AIRLINES.find((a) => rawUpper.startsWith(a.code) || raw === a.name);
-    if (!airline) return false;
-    return (
-      preferences.avoided_airlines.includes(airline.name) ||
-      preferences.avoided_airlines.includes(airline.code)
-    );
+    // Try to find airline by code prefix or exact name match
+    const airline = AIRLINES.find((a) => {
+      const codeMatch = rawUpper.startsWith(a.code.toUpperCase());
+      const nameMatch = rawUpper === a.name.toUpperCase() || raw === a.name;
+      return codeMatch || nameMatch;
+    });
+    
+    if (airline) {
+      // Check if airline name or code is in avoided list
+      return (
+        preferences.avoided_airlines.includes(airline.name) ||
+        preferences.avoided_airlines.includes(airline.code)
+      );
+    }
+    
+    return false;
   };
 
   // Handle flight selection
