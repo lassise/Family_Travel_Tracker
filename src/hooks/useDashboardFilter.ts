@@ -93,21 +93,36 @@ export const useDashboardFilter = (familyMembers: FamilyMember[]): UseDashboardF
     visitDetails: VisitDetail[], 
     visitMemberMap: Map<string, string[]>
   ): number | null => {
+    if (!visitDetails || visitDetails.length === 0) return null;
+    if (!visitMemberMap || visitMemberMap.size === 0) return null;
+
     // Filter visits based on selected member
+    // Only include visits where the selected member was actually present
     const relevantVisits = selectedMemberId === null
       ? visitDetails
       : visitDetails.filter(visit => {
+          if (!visit || !visit.id) return false;
           const memberIds = visitMemberMap.get(visit.id);
-          return memberIds?.includes(selectedMemberId);
+          // Only include this visit if the selected member is in the member list for this specific visit
+          return memberIds && memberIds.length > 0 && memberIds.includes(selectedMemberId);
         });
 
+    if (relevantVisits.length === 0) return null;
+
+    // Find the earliest year from the filtered visits
     return relevantVisits.reduce((earliest, visit) => {
+      if (!visit) return earliest;
+      
       let year: number | null = null;
       if (visit.visit_date) {
-        year = new Date(visit.visit_date).getFullYear();
+        const visitDate = new Date(visit.visit_date);
+        if (!isNaN(visitDate.getTime())) {
+          year = visitDate.getFullYear();
+        }
       } else if (visit.approximate_year) {
         year = visit.approximate_year;
       }
+      
       if (year && (!earliest || year < earliest)) {
         return year;
       }

@@ -53,23 +53,55 @@ const Dashboard = () => {
 
   // Fetch visit-member mappings for "Since" calculation
   useEffect(() => {
+    if (!user) return;
+    
     const fetchVisitMembers = async () => {
-      const { data } = await supabase
+      // Fetch visit_family_members scoped to current user (RLS should handle this, but be explicit)
+      const { data, error } = await supabase
         .from('visit_family_members')
-        .select('visit_id, family_member_id');
+        .select('visit_id, family_member_id')
+        .eq('user_id', user.id);
+      
+      if (error) {
+        console.error('Error fetching visit members:', error);
+        return;
+      }
       
       if (data) {
         const map = new globalThis.Map<string, string[]>();
         data.forEach(item => {
-          const existing = map.get(item.visit_id) || [];
-          existing.push(item.family_member_id);
-          map.set(item.visit_id, existing);
+          if (item.visit_id && item.family_member_id) {
+            const existing = map.get(item.visit_id) || [];
+            if (!existing.includes(item.family_member_id)) {
+              existing.push(item.family_member_id);
+              map.set(item.visit_id, existing);
+            }
+          }
         });
         setVisitMemberMap(map);
+      } else {
+        // Clear map if no data
+        setVisitMemberMap(new globalThis.Map());
       }
     };
     fetchVisitMembers();
-  }, []);
+
+    // Subscribe to changes in visit_family_members
+    const channel = supabase
+      .channel('visit_family_members_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'visit_family_members' }, 
+        () => {
+          // Debounce updates
+          setTimeout(fetchVisitMembers, 300);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -159,6 +191,8 @@ const Dashboard = () => {
             totalContinents={filteredContinents}
             homeCountry={homeCountry}
             earliestYear={filteredEarliestYear}
+            visitMemberMap={visitMemberMap}
+            selectedMemberId={selectedMemberId}
             filterComponent={
               <DashboardMemberFilter
                 familyMembers={familyMembers}

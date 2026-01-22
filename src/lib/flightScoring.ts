@@ -116,7 +116,175 @@ const AMENITY_NICE_TO_HAVE_BOOST = 10; // Boost for having nice-to-have amenity
 
 // Airline preference constants
 const AVOIDED_AIRLINE_PENALTY = 50; // Massive penalty applied to total score for avoided airlines
-const PREFERRED_AIRLINE_BOOST = 20; // Boost applied to total score for preferred airlines
+const PREFERRED_AIRLINE_BOOST = 15; // Boost applied to total score for preferred airlines
+const HIGH_PRICE_PENALTY = 5; // Penalty for flights identified as higher price
+
+// Airline alias map for common variations (e.g., "JetBlue" -> "JetBlue Airways", "B6")
+const AIRLINE_ALIASES: Record<string, string[]> = {
+  "jetblue": ["B6", "jetblue", "jetblue airways", "jet blue"],
+  "spirit": ["NK", "spirit", "spirit airlines"],
+  "frontier": ["F9", "frontier", "frontier airlines"],
+  "american": ["AA", "american", "american airlines"],
+  "delta": ["DL", "delta", "delta air lines"],
+  "united": ["UA", "united", "united airlines"],
+  "southwest": ["WN", "southwest", "southwest airlines"],
+  "alaska": ["AS", "alaska", "alaska airlines"],
+};
+
+/**
+ * Canonical airline normalization function
+ * Returns normalized code and name for consistent matching
+ */
+interface NormalizedAirline {
+  codeNormalized: string | null; // Uppercase IATA code (e.g., "B6", "NK")
+  nameNormalized: string | null; // Lowercase trimmed name (e.g., "jetblue", "spirit")
+  airline: Airline | null; // Full airline object if found
+}
+
+const normalizeAirline = (airlineInput: string | null | undefined): NormalizedAirline => {
+  if (!airlineInput) {
+    return { codeNormalized: null, nameNormalized: null, airline: null };
+  }
+
+  const input = airlineInput.trim();
+  const inputUpper = input.toUpperCase();
+  const inputLower = input.toLowerCase();
+
+  // Try to find airline by code first (most reliable)
+  let airline = AIRLINES.find(a => {
+    const codeMatch = inputUpper === a.code || inputUpper.startsWith(a.code);
+    const nameMatch = inputLower === a.name.toLowerCase() || 
+                     a.name.toLowerCase().includes(inputLower) ||
+                     inputLower.includes(a.name.toLowerCase());
+    return codeMatch || nameMatch;
+  });
+
+  // If not found, try alias matching
+  if (!airline) {
+    for (const [canonical, aliases] of Object.entries(AIRLINE_ALIASES)) {
+      if (aliases.some(alias => {
+        const aliasUpper = alias.toUpperCase();
+        const aliasLower = alias.toLowerCase();
+        return inputUpper === aliasUpper || 
+               inputUpper.startsWith(aliasUpper) ||
+               inputLower === aliasLower ||
+               inputLower.includes(aliasLower) ||
+               aliasLower.includes(inputLower);
+      })) {
+        // Find airline by canonical name
+        airline = AIRLINES.find(a => a.name.toLowerCase().includes(canonical));
+        break;
+      }
+    }
+  }
+
+  // Extract code from input if it looks like a flight number (e.g., "B61707" -> "B6")
+  let codeNormalized: string | null = null;
+  if (input.length >= 2) {
+    const potentialCode = input.substring(0, 2).toUpperCase();
+    if (AIRLINES.some(a => a.code === potentialCode)) {
+      codeNormalized = potentialCode;
+    } else if (airline) {
+      codeNormalized = airline.code;
+    }
+  } else if (airline) {
+    codeNormalized = airline.code;
+  }
+
+  const nameNormalized = airline ? airline.name.toLowerCase().trim() : null;
+
+  return {
+    codeNormalized,
+    nameNormalized,
+    airline: airline || null,
+  };
+};
+
+/**
+ * Check if an airline matches a preference list (preferred or avoided)
+ * Uses canonical normalization for robust matching
+ * 
+ * Matches if ANY of these conditions are true:
+ * - Preference contains the airline code and flight has that code
+ * - Preference contains the airline name (or alias) and flight has that name
+ * - Preference code matches flight code (e.g., "B6" matches "B61707")
+ * - Preference name matches flight name (case-insensitive, partial match)
+ */
+const matchesAirlinePreference = (
+  airlineInput: string | null | undefined,
+  preferenceList: string[]
+): boolean => {
+  if (!airlineInput || preferenceList.length === 0) return false;
+
+  const normalized = normalizeAirline(airlineInput);
+  if (!normalized.codeNormalized && !normalized.nameNormalized) return false;
+  
+  // Check each preference in the list
+  for (const pref of preferenceList) {
+    const prefTrimmed = (pref || "").trim();
+    if (!prefTrimmed) continue;
+    
+    const prefUpper = prefTrimmed.toUpperCase();
+    const prefLower = prefTrimmed.toLowerCase();
+    
+    // 1. Direct code match (e.g., preference "B6" matches flight "B6" or "B61707")
+    if (normalized.codeNormalized) {
+      if (prefUpper === normalized.codeNormalized || 
+          prefUpper.startsWith(normalized.codeNormalized) ||
+          normalized.codeNormalized.startsWith(prefUpper)) {
+        return true;
+      }
+    }
+    
+    // 2. Direct name match (case-insensitive)
+    if (normalized.nameNormalized) {
+      if (prefLower === normalized.nameNormalized ||
+          normalized.nameNormalized.includes(prefLower) ||
+          prefLower.includes(normalized.nameNormalized)) {
+        return true;
+      }
+    }
+    
+    // 3. Alias matching - check if preference is an alias for the airline
+    for (const [canonical, aliases] of Object.entries(AIRLINE_ALIASES)) {
+      // Check if preference matches any alias
+      const prefMatchesAlias = aliases.some(alias => {
+        const aliasUpper = alias.toUpperCase();
+        const aliasLower = alias.toLowerCase();
+        return prefUpper === aliasUpper || 
+               prefUpper.startsWith(aliasUpper) ||
+               prefLower === aliasLower ||
+               prefLower.includes(aliasLower) ||
+               aliasLower.includes(prefLower);
+      });
+      
+      // If preference matches alias, check if airline matches canonical
+      if (prefMatchesAlias) {
+        if (normalized.nameNormalized?.includes(canonical) ||
+            normalized.codeNormalized === aliases[0]?.toUpperCase()) {
+          return true;
+        }
+      }
+    }
+    
+    // 4. Normalize preference and check against airline
+    const prefNormalized = normalizeAirline(prefTrimmed);
+    if (prefNormalized.codeNormalized && normalized.codeNormalized) {
+      if (prefNormalized.codeNormalized === normalized.codeNormalized) {
+        return true;
+      }
+    }
+    if (prefNormalized.nameNormalized && normalized.nameNormalized) {
+      if (prefNormalized.nameNormalized === normalized.nameNormalized ||
+          prefNormalized.nameNormalized.includes(normalized.nameNormalized) ||
+          normalized.nameNormalized.includes(prefNormalized.nameNormalized)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
 
 // Parse duration - can be ISO 8601 string "PT5H30M" or number (minutes)
 const parseDuration = (duration: string | number | undefined | null): number => {
@@ -161,71 +329,39 @@ const scoreDepartureTime = (hour: number, preferences: FlightPreferences): numbe
 };
 
 // Check if an airline is in the avoided list (by code or name)
+// Uses canonical normalization for robust matching
 const isAvoidedAirline = (airlineCode: string, preferences: FlightPreferences): boolean => {
-  if (!airlineCode) return false;
-  
-  const normalizedCode = airlineCode.trim().toUpperCase();
-  
-  // First, check if the raw code itself is in the avoided list (e.g., "NK", "F9")
-  if (preferences.avoided_airlines.some(avoided => {
-    const normalizedAvoided = (avoided || "").trim().toUpperCase();
-    return normalizedCode === normalizedAvoided || normalizedCode.startsWith(normalizedAvoided);
-  })) {
-    return true;
-  }
-  
-  // Then check via airline lookup
-  const airline = AIRLINES.find(a => normalizedCode.startsWith(a.code) || normalizedCode === a.name.toUpperCase());
-  if (!airline) return false;
-  
-  // Check if the airline name OR code is in the avoided list
-  return preferences.avoided_airlines.includes(airline.name) || 
-         preferences.avoided_airlines.includes(airline.code);
+  if (!airlineCode || preferences.avoided_airlines.length === 0) return false;
+  return matchesAirlinePreference(airlineCode, preferences.avoided_airlines);
 };
 
 // Score airline reliability - returns score and flags for preference boosts/penalties
+// Uses canonical normalization for robust matching
 const scoreAirlineReliability = (airlineCode: string, preferences: FlightPreferences): {
   score: number;
   isAvoided: boolean;
   isPreferred: boolean;
 } => {
-  const airline = AIRLINES.find(a => airlineCode.startsWith(a.code) || airlineCode === a.name);
+  const normalized = normalizeAirline(airlineCode);
+  const airline = normalized.airline;
   let score = airline?.reliability || 70;
   let isAvoided = false;
   let isPreferred = false;
 
-  // Normalize code for direct matching
-  const normalizedCode = (airlineCode || "").trim().toUpperCase();
-  
-  // Check for preferred airlines by both name and code
-  if (airline && (preferences.preferred_airlines.includes(airline.name) || preferences.preferred_airlines.includes(airline.code))) {
-    score = Math.min(100, score + 20); // Stronger boost for preferred airlines
-    isPreferred = true;
-  }
-  
-  // Also check preferred airlines by code directly (e.g., user saves "NK", API returns "NK123")
-  if (!isPreferred && preferences.preferred_airlines.some(preferred => {
-    const normalizedPreferred = (preferred || "").trim().toUpperCase();
-    return normalizedCode === normalizedPreferred || normalizedCode.startsWith(normalizedPreferred);
-  })) {
-    score = Math.min(100, score + 20);
-    isPreferred = true;
+  // Check for preferred airlines using canonical matching
+  if (preferences.preferred_airlines.length > 0) {
+    isPreferred = matchesAirlinePreference(airlineCode, preferences.preferred_airlines);
+    if (isPreferred) {
+      score = Math.min(100, score + 20); // Boost for preferred airlines
+    }
   }
 
-  // Check for avoided airlines - by name or code via airline lookup
-  if (airline && (preferences.avoided_airlines.includes(airline.name) || preferences.avoided_airlines.includes(airline.code))) {
-    score = 0; // Zero out the reliability score
-    isAvoided = true;
-  }
-
-  // Check avoided airlines by code directly (e.g., "NK", "F9") - case-insensitive
-  // This handles cases where airline lookup fails or user saved code directly
-  if (!isAvoided && preferences.avoided_airlines.some(avoided => {
-    const normalizedAvoided = (avoided || "").trim().toUpperCase();
-    return normalizedCode === normalizedAvoided || normalizedCode.startsWith(normalizedAvoided);
-  })) {
-    score = 0;
-    isAvoided = true;
+  // Check for avoided airlines using canonical matching
+  if (preferences.avoided_airlines.length > 0) {
+    isAvoided = matchesAirlinePreference(airlineCode, preferences.avoided_airlines);
+    if (isAvoided) {
+      score = 0; // Zero out the reliability score for avoided airlines
+    }
   }
 
   // Bonus for preferred alliances
@@ -535,18 +671,9 @@ const generateExplanation = (
     reasons.push("non-stop flight");
   }
 
-  if (flight.breakdown.airlineReliability > 80) {
-    reasons.push("reliable airline");
-  }
-
   // Add preferred airline to reasons
   if (flight.isPreferredAirline) {
-    const airline = AIRLINES.find(a => {
-      const firstSegment = flight.itineraries[0]?.segments[0];
-      const airlineCode = firstSegment?.airline || "";
-      return airlineCode.startsWith(a.code) || airlineCode === a.name;
-    });
-    reasons.push(`preferred airline (${airline?.name || "your preferred airline"})`);
+    reasons.push("preferred airline");
   }
 
   if (flight.breakdown.departureTime > 80) {
@@ -562,22 +689,25 @@ const generateExplanation = (
   }
 
   // Different verbiage based on ranking
+  // All flights are numbered sequentially: #1, #2, #3, etc.
+  const flightNumber = rankIndex + 1;
+  
   if (ranking === "best") {
     if (reasons.length === 0) {
-      return "🏆 Top pick: Best balance of your preferences";
+      return `🏆 Top pick (#${flightNumber}): Best balance of your preferences`;
     }
-    return `🏆 Top pick: ${reasons.join(", ")}`;
+    return `🏆 Top pick (#${flightNumber}): ${reasons.join(", ")}`;
   } else if (ranking === "good_alternative") {
     const positives = reasons.slice(0, 2);
     if (positives.length === 0) {
-      return `✓ Good alternative (#${rankIndex + 1}): Solid option worth considering`;
+      return `✓ Good alternative (#${flightNumber}): Solid option worth considering`;
     }
-    return `✓ Good alternative (#${rankIndex + 1}): ${positives.join(", ")}`;
+    return `✓ Good alternative (#${flightNumber}): ${positives.join(", ")}`;
   } else if (ranking === "acceptable") {
     if (reasons.length === 0) {
-      return `Option #${rankIndex + 1}: Meets basic requirements`;
+      return `Option #${flightNumber}: Meets basic requirements`;
     }
-    return `Option #${rankIndex + 1}: ${reasons.slice(0, 2).join(", ")}`;
+    return `Option #${flightNumber}: ${reasons.slice(0, 2).join(", ")}`;
   } else {
     // not_recommended
     const negatives: string[] = [];
@@ -648,9 +778,22 @@ const generateMatchExplanation = (flight: ScoredFlight, preferences: FlightPrefe
       whyBestChoice.push("In-flight WiFi available");
     } else if (match.label.includes("Family")) {
       whyBestChoice.push("Family-friendly timing and connections");
-    } else if (match.detail?.includes("preferred airline")) {
-      whyBestChoice.push(`Flying on ${match.label}, your preferred airline`);
+    } else if (match.detail?.includes("preferred airline") || match.detail === "Your preferred airline") {
+      // Check both the detail text and also check if the label is an airline name
+      const airlineName = match.label;
+      whyBestChoice.push(`Flying on ${airlineName}, your preferred airline`);
     }
+  }
+  
+  // Also check if isPreferredAirline flag is set (fallback if not in preferenceMatches)
+  if (flight.isPreferredAirline && !whyBestChoice.some(r => r.includes("preferred airline"))) {
+    const airline = AIRLINES.find(a => {
+      const firstSegment = flight.itineraries[0]?.segments[0];
+      const airlineCode = firstSegment?.airline || "";
+      return airlineCode.startsWith(a.code) || airlineCode === a.name;
+    });
+    const airlineName = airline?.name || flight.itineraries[0]?.segments[0]?.airline || "this airline";
+    whyBestChoice.push(`Flying on ${airlineName}, your preferred airline`);
   }
   
   // Add breakdown-based positives
@@ -1006,6 +1149,17 @@ export const scoreFlights = (
       weightedTotal = Math.min(100, weightedTotal + PREFERRED_AIRLINE_BOOST);
     }
 
+    // Calculate priceInsight early to apply penalty if needed
+    const departureAirport = firstSegment?.departureAirport || "";
+    const arrivalAirport = lastSegment?.arrivalAirport || "";
+    const departureDateStr = firstSegment?.departureTime ? new Date(firstSegment.departureTime).toISOString().split('T')[0] : "";
+    const priceInsight = calculatePriceInsight(flight.price, prices, departureDateStr, departureAirport, arrivalAirport);
+
+    // Apply penalty for higher price flights
+    if (priceInsight.level === "high") {
+      weightedTotal = Math.max(0, weightedTotal - HIGH_PRICE_PENALTY);
+    }
+
     breakdown.total = weightedTotal;
 
     // Assign badges
@@ -1036,18 +1190,15 @@ export const scoreFlights = (
       preferenceMatches.push({ type: "positive", label: "Preferred departure time" });
     }
     
-    const airline = getAirlineCached(firstSegment?.airline || "");
     const airlineCode = firstSegment?.airline || "";
-    // Check preferred airlines by both name and code
-    if (airline && (preferences.preferred_airlines.includes(airline.name) || preferences.preferred_airlines.includes(airline.code))) {
-      preferenceMatches.push({ type: "positive", label: `${airline.name}`, detail: "Your preferred airline" });
-    } else if (airlineCode && preferences.preferred_airlines.some(preferred => {
-      // Also check by code directly in case airline wasn't found in lookup
-      const normalizedPreferred = (preferred || "").trim().toUpperCase();
-      const normalizedCode = airlineCode.trim().toUpperCase();
-      return normalizedCode === normalizedPreferred || normalizedCode.startsWith(normalizedPreferred);
-    })) {
-      preferenceMatches.push({ type: "positive", label: `Airline ${airlineCode}`, detail: "Your preferred airline" });
+    // Check preferred airlines using canonical matching
+    if (airlineCode && preferences.preferred_airlines.length > 0) {
+      const isPreferred = matchesAirlinePreference(airlineCode, preferences.preferred_airlines);
+      if (isPreferred) {
+        const normalized = normalizeAirline(airlineCode);
+        const airlineName = normalized.airline?.name || normalized.codeNormalized || airlineCode;
+        preferenceMatches.push({ type: "positive", label: airlineName, detail: "Your preferred airline" });
+      }
     }
     
     if (breakdown.airlineReliability > 85) {
@@ -1092,19 +1243,14 @@ export const scoreFlights = (
       preferenceMatches.push({ type: "negative", label: "Red-eye flight", detail: "You prefer to avoid" });
     }
     
-    // Check avoided airlines by both name and code
-    if (airline && (preferences.avoided_airlines.includes(airline.name) || preferences.avoided_airlines.includes(airline.code))) {
-      preferenceMatches.push({ type: "negative", label: `${airline.name}`, detail: "Airline you avoid" });
-    }
-    // Also check by code directly in case airline wasn't found in lookup
-    // (airlineCode already declared above, reusing it)
-    if (airlineCode && preferences.avoided_airlines.some(avoided => {
-      const normalizedAvoided = (avoided || "").trim().toUpperCase();
-      const normalizedCode = airlineCode.trim().toUpperCase();
-      return normalizedCode === normalizedAvoided || normalizedCode.startsWith(normalizedAvoided);
-    }) && !airline) {
-      // Only add if we haven't already added it above
-      preferenceMatches.push({ type: "negative", label: `Airline code ${airlineCode}`, detail: "Airline you avoid" });
+    // Check avoided airlines using canonical matching
+    if (airlineCode && preferences.avoided_airlines.length > 0) {
+      const isAvoided = matchesAirlinePreference(airlineCode, preferences.avoided_airlines);
+      if (isAvoided) {
+        const normalized = normalizeAirline(airlineCode);
+        const airlineName = normalized.airline?.name || normalized.codeNormalized || airlineCode;
+        preferenceMatches.push({ type: "negative", label: airlineName, detail: "Airline you avoid" });
+      }
     }
     
     if (breakdown.layoverQuality < 60) {
@@ -1149,10 +1295,7 @@ export const scoreFlights = (
       }
     }
 
-    // Build booking URL
-    const departureAirport = firstSegment?.departureAirport || "";
-    const arrivalAirport = lastSegment?.arrivalAirport || "";
-    const departureDateStr = firstSegment?.departureTime ? new Date(firstSegment.departureTime).toISOString().split('T')[0] : "";
+    // Build booking URL (reuse variables calculated above)
     const returnSegment = flight.itineraries[1]?.segments[0];
     const returnDateStr = returnSegment?.departureTime ? new Date(returnSegment.departureTime).toISOString().split('T')[0] : "";
     
@@ -1161,7 +1304,7 @@ export const scoreFlights = (
       : undefined;
 
     const pricePerTicket = totalPassengers > 0 ? flight.price / totalPassengers : flight.price;
-    const priceInsight = calculatePriceInsight(flight.price, prices, departureDateStr, departureAirport, arrivalAirport);
+    // priceInsight already calculated above for penalty application
 
     const scoredFlight: ScoredFlight = {
       ...flight,
@@ -1194,39 +1337,58 @@ export const scoreFlights = (
     scoredFlights[index] = scoredFlight;
   }
 
-  // Sort by score descending, but put avoided airlines at the bottom regardless of score
+  // Sort by FINAL score descending, but put avoided airlines at the bottom regardless of score
+  // CRITICAL: The sorted array is the source of truth for display order and numbering
   scoredFlights.sort((a, b) => {
-    // Avoided airlines always go to the bottom
+    // Avoided airlines always go to the bottom (unless ALL flights are avoided)
     if (a.isAvoidedAirline && !b.isAvoidedAirline) return 1;
     if (!a.isAvoidedAirline && b.isAvoidedAirline) return -1;
-    // Within same category (both avoided or both not avoided), sort by score
+    // Within same category (both avoided or both not avoided), sort by FINAL score descending
     return b.score - a.score;
   });
   
-  // Now assign rankings and explanations based on sorted order
-  // Only consider non-avoided flights for "best" ranking
+  // Now assign rankings and explanations based on FINAL sorted order
+  // Separate non-avoided flights for "best" ranking determination
   const nonAvoidedFlights = scoredFlights.filter(f => !f.isAvoidedAirline);
-  const topScore = (nonAvoidedFlights[0]?.score || scoredFlights[0]?.score) || 0;
+  const topScore = nonAvoidedFlights.length > 0 ? nonAvoidedFlights[0].score : (scoredFlights[0]?.score || 0);
+  
+  // Track rank index separately for non-avoided flights (starts at 0 for #1)
+  let nonAvoidedRankIndex = 0;
   
   for (let i = 0; i < scoredFlights.length; i++) {
     const flight = scoredFlights[i];
     const scoreDiff = topScore - flight.score;
     
     let ranking: FlightRanking;
-    // Avoided airlines should never get "best" ranking, even if they're first in the list
+    let rankIndex: number;
+    
+    // CRITICAL: Avoided airlines CANNOT be #1 if any non-avoided option exists
     if (flight.isAvoidedAirline) {
       ranking = "not_recommended";
-    } else if (i === 0 || (nonAvoidedFlights.length > 0 && flight === nonAvoidedFlights[0])) {
-      ranking = "best";
-    } else if (scoreDiff <= 10) {
-      ranking = "good_alternative";
-    } else if (scoreDiff <= 25 || flight.score >= 60) {
-      ranking = "acceptable";
+      // Avoided airlines are numbered after all non-avoided flights
+      // Count how many avoided airlines come before this one
+      const avoidedBeforeThis = scoredFlights.slice(0, i).filter(f => f.isAvoidedAirline).length;
+      rankIndex = nonAvoidedFlights.length + avoidedBeforeThis;
     } else {
-      ranking = "not_recommended";
+      // For non-avoided flights, use sequential numbering starting from 0 (#1, #2, etc.)
+      rankIndex = nonAvoidedRankIndex;
+      nonAvoidedRankIndex++;
+      
+      // Determine ranking category based on position and score
+      if (rankIndex === 0) {
+        // First non-avoided flight is always "best" (#1)
+        ranking = "best";
+      } else if (scoreDiff <= 10) {
+        ranking = "good_alternative";
+      } else if (scoreDiff <= 25 || flight.score >= 60) {
+        ranking = "acceptable";
+      } else {
+        ranking = "not_recommended";
+      }
     }
     
-    flight.explanation = generateExplanation(flight, preferences, ranking, i);
+    // Generate explanation with correct rank index (will be displayed as rankIndex + 1)
+    flight.explanation = generateExplanation(flight, preferences, ranking, rankIndex);
   }
   
   return scoredFlights;

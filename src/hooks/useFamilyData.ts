@@ -52,9 +52,13 @@ export const useFamilyData = () => {
     
     try {
       // Fetch all data in parallel
-      const [membersResult, countriesResult, visitsResult, wishlistResult, profileResult] = await Promise.all([
+      // IMPORTANT: Fetch BOTH old system (country_visits) and new system (visit_family_members)
+      // to preserve countries added without detailed visit records
+      const [membersResult, countriesResult, visitDetailsResult, visitMembersResult, countryVisitsResult, wishlistResult, profileResult] = await Promise.all([
         supabase.from("family_members").select("*").order("created_at", { ascending: true }),
         supabase.from("countries").select("*").order("name", { ascending: true }),
+        supabase.from("country_visit_details").select("id, country_id"),
+        supabase.from("visit_family_members").select("visit_id, family_member_id, family_members (name)"),
         supabase.from("country_visits").select("country_id, family_member_id, family_members (name)"),
         supabase.from("country_wishlist").select("country_id"),
         supabase.from("profiles").select("home_country").eq("id", user.id).single()
@@ -62,48 +66,90 @@ export const useFamilyData = () => {
 
       if (membersResult.error) throw membersResult.error;
       if (countriesResult.error) throw countriesResult.error;
-      if (visitsResult.error) throw visitsResult.error;
+      if (visitDetailsResult.error) throw visitDetailsResult.error;
+      if (visitMembersResult.error) throw visitMembersResult.error;
+      if (countryVisitsResult.error) throw countryVisitsResult.error;
       if (wishlistResult.error) throw wishlistResult.error;
 
       const membersData = membersResult.data || [];
       const countriesData = countriesResult.data || [];
-      const visitsData = visitsResult.data || [];
+      const visitDetailsData = visitDetailsResult.data || [];
+      const visitMembersData = visitMembersResult.data || [];
+      const countryVisitsData = countryVisitsResult.data || [];
       const wishlistData = wishlistResult.data || [];
       const userHomeCountry = profileResult.data?.home_country || null;
 
-      // Build lookup maps for O(1) access
-      const visitsByMember = new Map<string, number>();
-      const visitsByCountry = new Map<string, string[]>();
-
-      for (const visit of visitsData) {
-        // Count visits per member
-        if (visit.family_member_id) {
-          visitsByMember.set(
-            visit.family_member_id, 
-            (visitsByMember.get(visit.family_member_id) || 0) + 1
-          );
+      // Build a map from visit_id to country_id (for new detailed visit system)
+      const visitToCountry = new Map<string, string>();
+      for (const visit of visitDetailsData) {
+        if (visit.id && visit.country_id) {
+          visitToCountry.set(visit.id, visit.country_id);
         }
-        // Group visits by country
-        if (visit.country_id) {
-          const memberName = (visit as any).family_members?.name;
-          if (memberName) {
-            const existing = visitsByCountry.get(visit.country_id) || [];
-            existing.push(memberName);
-            visitsByCountry.set(visit.country_id, existing);
+      }
+
+      // Build lookup maps for O(1) access
+      // Map: country_id -> Set of member names who visited
+      const visitsByCountry = new Map<string, Set<string>>();
+      // Map: family_member_id -> Set of unique country_ids visited
+      const countriesByMember = new Map<string, Set<string>>();
+
+      // Process NEW system: visit_family_members (detailed visits with dates)
+      for (const visitMember of visitMembersData) {
+        const visitId = visitMember.visit_id;
+        const countryId = visitToCountry.get(visitId);
+        const memberName = (visitMember as any).family_members?.name;
+        const memberId = visitMember.family_member_id;
+
+        if (countryId && memberName && memberId) {
+          // Add member to country's visitedBy set
+          if (!visitsByCountry.has(countryId)) {
+            visitsByCountry.set(countryId, new Set());
           }
+          visitsByCountry.get(countryId)!.add(memberName);
+
+          // Add country to member's visited countries set
+          if (!countriesByMember.has(memberId)) {
+            countriesByMember.set(memberId, new Set());
+          }
+          countriesByMember.get(memberId)!.add(countryId);
+        }
+      }
+
+      // Process OLD system: country_visits (simple associations without detailed visits)
+      // This preserves countries that were added without full trip details
+      for (const countryVisit of countryVisitsData) {
+        const countryId = countryVisit.country_id;
+        const memberName = (countryVisit as any).family_members?.name;
+        const memberId = countryVisit.family_member_id;
+
+        if (countryId && memberName && memberId) {
+          // Add member to country's visitedBy set (merge with new system data)
+          if (!visitsByCountry.has(countryId)) {
+            visitsByCountry.set(countryId, new Set());
+          }
+          visitsByCountry.get(countryId)!.add(memberName);
+
+          // Add country to member's visited countries set
+          if (!countriesByMember.has(memberId)) {
+            countriesByMember.set(memberId, new Set());
+          }
+          countriesByMember.get(memberId)!.add(countryId);
         }
       }
 
       // Map data with O(1) lookups
       const membersWithCount = membersData.map((member) => ({
         ...member,
-        countriesVisited: visitsByMember.get(member.id) || 0
+        countriesVisited: countriesByMember.get(member.id)?.size || 0
       }));
 
-      const countriesWithVisits = countriesData.map((country) => ({
-        ...country,
-        visitedBy: visitsByCountry.get(country.id) || []
-      }));
+      const countriesWithVisits = countriesData.map((country) => {
+        const memberSet = visitsByCountry.get(country.id);
+        return {
+          ...country,
+          visitedBy: memberSet ? Array.from(memberSet) : []
+        };
+      });
 
       const wishlistIds = wishlistData
         .map(w => w.country_id)
@@ -135,6 +181,8 @@ export const useFamilyData = () => {
       .channel('family_data_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'family_members' }, debouncedFetch)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'countries' }, debouncedFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'country_visit_details' }, debouncedFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'visit_family_members' }, debouncedFetch)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'country_visits' }, debouncedFetch)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'country_wishlist' }, debouncedFetch)
       .subscribe();

@@ -497,6 +497,18 @@ const Flights = () => {
   // Continue to Google Flights
   const handleContinueToGoogle = () => {
     let url: string;
+    
+    // Extract airline code from selected flight (if available)
+    // For one-way: use outbound flight's airline
+    // For round-trip: prefer outbound airline, fallback to return if needed
+    let airlineCode: string | undefined = undefined;
+    if (selectedFlights.length > 0) {
+      const outboundFlight = selectedFlights.find(s => s.legId === "outbound");
+      const flight = outboundFlight?.flight || selectedFlights[0]?.flight;
+      if (flight?.itineraries?.[0]?.segments?.[0]?.airline) {
+        airlineCode = flight.itineraries[0].segments[0].airline;
+      }
+    }
 
     if (tripType === "oneway") {
       url = buildGoogleFlightsUrl({
@@ -506,6 +518,7 @@ const Flights = () => {
         departDate,
         passengers,
         cabinClass,
+        airlineCode,
       });
       logBookingEvent("oneway", { origin, destination, departDate, passengers });
     } else if (tripType === "roundtrip") {
@@ -517,6 +530,7 @@ const Flights = () => {
         returnDate,
         passengers,
         cabinClass,
+        airlineCode,
       });
       logBookingEvent("roundtrip", { origin, destination, departDate, returnDate, passengers });
     } else {
@@ -529,6 +543,7 @@ const Flights = () => {
         passengers,
         cabinClass,
         segments,
+        airlineCode,
       });
       logBookingEvent("multicity", { segments, passengers });
     }
