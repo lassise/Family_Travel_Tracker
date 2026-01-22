@@ -3,8 +3,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+// import { Logo } from "@/components/common/Logo";
 import { 
-  Plane, 
   Plus, 
   Menu, 
   User,
@@ -15,7 +15,8 @@ import {
   Globe,
   PlaneTakeoff,
   Bell,
-  Sparkles
+  Sparkles,
+  Plane
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";

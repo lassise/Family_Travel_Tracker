@@ -6,7 +6,7 @@ import { usStateFlagUrls, getStateAbbreviation } from '@/lib/stateFlagsData';
 interface StateGridSelectorProps {
   states: Record<string, string>;
   selectedStates: Set<string>;
-  onStateToggle: (stateCode: string) => void;
+  onStateClick: (stateCode: string, stateName: string) => void;
   countryCode: string;
 }
 
@@ -14,13 +14,13 @@ const StateCard = memo(({
   code, 
   name, 
   isSelected, 
-  onToggle,
+  onClick,
   flagUrl 
 }: { 
   code: string; 
   name: string; 
   isSelected: boolean; 
-  onToggle: () => void;
+  onClick: () => void;
   flagUrl: string | null;
 }) => {
   const abbreviation = getStateAbbreviation(code);
@@ -28,7 +28,7 @@ const StateCard = memo(({
   return (
     <button
       type="button"
-      onClick={onToggle}
+      onClick={onClick}
       className={cn(
         "relative group aspect-[4/3] rounded-lg overflow-hidden transition-all duration-200",
         "border-2 hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
@@ -94,7 +94,7 @@ const StateCard = memo(({
 
 StateCard.displayName = 'StateCard';
 
-const StateGridSelector = ({ states, selectedStates, onStateToggle, countryCode }: StateGridSelectorProps) => {
+const StateGridSelector = ({ states, selectedStates, onStateClick, countryCode }: StateGridSelectorProps) => {
   const stateEntries = Object.entries(states);
   const isUSA = countryCode === 'US';
   
@@ -114,7 +114,7 @@ const StateGridSelector = ({ states, selectedStates, onStateToggle, countryCode 
           code={code}
           name={name}
           isSelected={selectedStates.has(code)}
-          onToggle={() => onStateToggle(code)}
+          onClick={() => onStateClick(code, name)}
           flagUrl={getFlagUrl(code)}
         />
       ))}

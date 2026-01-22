@@ -73,6 +73,7 @@ interface InteractiveWorldMapProps {
   wishlist: string[];
   homeCountry?: string | null;
   onRefetch?: () => void;
+  selectedMemberId?: string | null;
 }
 
 // Validate that a color is a valid HSL/RGB/hex string
@@ -114,7 +115,7 @@ const loadMapColors = (): MapColors => {
   return { ...defaultMapColors };
 };
 
-const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: InteractiveWorldMapProps) => {
+const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch, selectedMemberId }: InteractiveWorldMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapToken, setMapToken] = useState<string | null>(null);
@@ -887,6 +888,7 @@ const InteractiveWorldMap = ({ countries, wishlist, homeCountry, onRefetch }: In
         open={stateDialogOpen}
         onOpenChange={setStateDialogOpen}
         country={selectedCountry}
+        selectedMemberId={selectedMemberId}
       />
 
       <CountryQuickActionDialog

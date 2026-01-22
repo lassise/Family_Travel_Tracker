@@ -37,7 +37,7 @@ const Dashboard = () => {
   const { trips, loading: tripsLoading } = useTrips();
   const { familyMembers, countries, wishlist, homeCountry, loading: familyLoading, totalContinents, refetch: refetchFamilyData } = useFamilyData();
   const { visitDetails } = useVisitDetails();
-  const { getStateVisitCount } = useStateVisits();
+  const { getStateVisitCount, stateVisits } = useStateVisits();
   const resolvedHome = useHomeCountry(homeCountry);
   const navigate = useNavigate();
   const [visitMemberMap, setVisitMemberMap] = useState<globalThis.Map<string, string[]>>(() => new globalThis.Map());
@@ -146,11 +146,58 @@ const Dashboard = () => {
     [filteredCountries, resolvedHome]
   );
 
-  // Get states visited count for home country
+  // List of 50 US states (excluding DC and territories)
+  const continentalUSStates = useMemo(() => {
+    const stateCodes = [
+      'US-AL', 'US-AZ', 'US-AR', 'US-CA', 'US-CO', 'US-CT', 'US-DE', 'US-FL',
+      'US-GA', 'US-ID', 'US-IL', 'US-IN', 'US-IA', 'US-KS', 'US-KY', 'US-LA',
+      'US-ME', 'US-MD', 'US-MA', 'US-MI', 'US-MN', 'US-MS', 'US-MO', 'US-MT',
+      'US-NE', 'US-NV', 'US-NH', 'US-NJ', 'US-NM', 'US-NY', 'US-NC', 'US-ND',
+      'US-OH', 'US-OK', 'US-OR', 'US-PA', 'US-RI', 'US-SC', 'US-SD', 'US-TN',
+      'US-TX', 'US-UT', 'US-VT', 'US-VA', 'US-WA', 'US-WV', 'US-WI', 'US-WY',
+      'US-AK', 'US-HI' // Alaska and Hawaii are included in the 50 states
+    ];
+    return new Set(stateCodes);
+  }, []);
+
+  // Get states visited count for home country (filtered by selected member if applicable)
   const statesVisitedCount = useMemo(() => {
     if (!resolvedHome.iso2 || !resolvedHome.hasStateTracking) return 0;
+    
+    if (selectedMemberId) {
+      // Filter by selected member - only count unique states where this member visited
+      const uniqueStates = new Set(
+        stateVisits
+          .filter(sv => {
+            if (sv.country_code !== resolvedHome.iso2 || sv.family_member_id !== selectedMemberId) {
+              return false;
+            }
+            // For US, only count 50 continental states (exclude DC and territories)
+            if (resolvedHome.iso2 === 'US' && !continentalUSStates.has(sv.state_code)) {
+              return false;
+            }
+            return true;
+          })
+          .map(sv => sv.state_code)
+      );
+      return uniqueStates.size;
+    }
+    
+    // Return unique state count (all members) - filtered to 50 states for US
+    if (resolvedHome.iso2 === 'US') {
+      const uniqueStates = new Set(
+        stateVisits
+          .filter(sv => 
+            sv.country_code === resolvedHome.iso2 && 
+            continentalUSStates.has(sv.state_code)
+          )
+          .map(sv => sv.state_code)
+      );
+      return uniqueStates.size;
+    }
+    
     return getStateVisitCount(resolvedHome.iso2);
-  }, [resolvedHome, getStateVisitCount]);
+  }, [resolvedHome, getStateVisitCount, stateVisits, selectedMemberId, continentalUSStates]);
 
   const formatDate = useCallback((date: string | null) => {
     if (!date) return "";
@@ -210,6 +257,7 @@ const Dashboard = () => {
             wishlist={wishlist} 
             homeCountry={homeCountry}
             onRefetch={refetchFamilyData}
+            selectedMemberId={selectedMemberId}
           />
         </div>
 

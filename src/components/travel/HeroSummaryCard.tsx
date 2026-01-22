@@ -49,20 +49,78 @@ const HeroSummaryCard = memo(({
     [countries, resolvedHome]
   );
 
+  // List of 50 US states (excluding DC and territories)
+  const continentalUSStates = useMemo(() => {
+    const stateCodes = [
+      'US-AL', 'US-AZ', 'US-AR', 'US-CA', 'US-CO', 'US-CT', 'US-DE', 'US-FL',
+      'US-GA', 'US-ID', 'US-IL', 'US-IN', 'US-IA', 'US-KS', 'US-KY', 'US-LA',
+      'US-ME', 'US-MD', 'US-MA', 'US-MI', 'US-MN', 'US-MS', 'US-MO', 'US-MT',
+      'US-NE', 'US-NV', 'US-NH', 'US-NJ', 'US-NM', 'US-NY', 'US-NC', 'US-ND',
+      'US-OH', 'US-OK', 'US-OR', 'US-PA', 'US-RI', 'US-SC', 'US-SD', 'US-TN',
+      'US-TX', 'US-UT', 'US-VT', 'US-VA', 'US-WA', 'US-WV', 'US-WI', 'US-WY',
+      'US-AK', 'US-HI' // Alaska and Hawaii are included in the 50 states
+    ];
+    return new Set(stateCodes);
+  }, []);
+
+  // Aggregate state visits by state code, showing which family members visited each state
+  const statesByCode = useMemo(() => {
+    if (!resolvedHome.iso2 || !resolvedHome.hasStateTracking) return new Map();
+    
+    const map = new Map<string, {
+      stateCode: string;
+      stateName: string;
+      visitedBy: string[]; // Array of family member names
+    }>();
+    
+    stateVisits
+      .filter(sv => {
+        // Filter by country code
+        if (sv.country_code !== resolvedHome.iso2) return false;
+        // For US, only include 50 continental states (exclude DC and territories)
+        if (resolvedHome.iso2 === 'US' && !continentalUSStates.has(sv.state_code)) {
+          return false;
+        }
+        return true;
+      })
+      .forEach(sv => {
+        const member = familyMembers.find(m => m.id === sv.family_member_id);
+        if (!member) return;
+        
+        const existing = map.get(sv.state_code);
+        if (existing) {
+          if (!existing.visitedBy.includes(member.name)) {
+            existing.visitedBy.push(member.name);
+          }
+        } else {
+          map.set(sv.state_code, {
+            stateCode: sv.state_code,
+            stateName: sv.state_name,
+            visitedBy: [member.name]
+          });
+        }
+      });
+    
+    return map;
+  }, [stateVisits, familyMembers, resolvedHome.iso2, resolvedHome.hasStateTracking, continentalUSStates]);
+
   // Get states visited for home country (filtered by selected member if applicable)
   const statesVisitedCount = useMemo(() => {
     if (!resolvedHome.iso2 || !resolvedHome.hasStateTracking) return 0;
+    
     if (selectedMemberId) {
-      // Filter by selected member
-      const uniqueStates = new Set(
-        stateVisits
-          .filter(sv => sv.country_code === resolvedHome.iso2 && sv.family_member_id === selectedMemberId)
-          .map(sv => sv.state_code)
-      );
-      return uniqueStates.size;
+      // Filter by selected member - only count states where this member visited
+      const selectedMember = familyMembers.find(m => m.id === selectedMemberId);
+      if (!selectedMember) return 0;
+      
+      return Array.from(statesByCode.values())
+        .filter(state => state.visitedBy.includes(selectedMember.name))
+        .length;
     }
-    return getStateVisitCount(resolvedHome.iso2);
-  }, [resolvedHome, getStateVisitCount, stateVisits, selectedMemberId]);
+    
+    // Return unique state count (all members)
+    return statesByCode.size;
+  }, [resolvedHome, statesByCode, selectedMemberId, familyMembers]);
 
   // Handle stat card clicks
   const handleStatClick = (label: string) => {
@@ -297,33 +355,71 @@ const HeroSummaryCard = memo(({
                 Visited States
               </DialogTitle>
               <p className="text-sm text-muted-foreground">
-                {statesVisitedCount} of 50 states visited
+                {selectedMemberId 
+                  ? `${statesVisitedCount} of 50 states visited by ${familyMembers.find(m => m.id === selectedMemberId)?.name || 'this member'}`
+                  : `${statesVisitedCount} of 50 states visited`
+                }
               </p>
             </DialogHeader>
             <ScrollArea className="h-[500px] pr-4">
-              <div className="grid grid-cols-2 gap-2">
-                {stateVisits
-                  .filter(sv => {
-                    // Filter by country code
-                    if (sv.country_code !== resolvedHome.iso2) return false;
-                    // Filter by selected member if applicable
-                    if (selectedMemberId && sv.family_member_id !== selectedMemberId) return false;
-                    return true;
-                  })
-                  .sort((a, b) => a.state_name.localeCompare(b.state_name))
-                  // Get unique states (remove duplicates by state_code)
-                  .filter((sv, index, self) => 
-                    index === self.findIndex(s => s.state_code === sv.state_code)
-                  )
-                  .map((stateVisit) => (
+              <div className="space-y-2">
+                {(() => {
+                  // Get states filtered by selected member if applicable
+                  let statesList = Array.from(statesByCode.values());
+                  
+                  if (selectedMemberId) {
+                    const selectedMember = familyMembers.find(m => m.id === selectedMemberId);
+                    if (selectedMember) {
+                      statesList = statesList.filter(state => 
+                        state.visitedBy.includes(selectedMember.name)
+                      );
+                    }
+                  }
+                  
+                  // Sort alphabetically
+                  statesList.sort((a, b) => a.stateName.localeCompare(b.stateName));
+                  
+                  if (statesList.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <MapPin className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                        <p>
+                          {selectedMemberId 
+                            ? `No states visited by ${familyMembers.find(m => m.id === selectedMemberId)?.name || 'this member'}`
+                            : 'No states visited yet'
+                          }
+                        </p>
+                      </div>
+                    );
+                  }
+                  
+                  return statesList.map((state) => (
                     <div
-                      key={stateVisit.id}
-                      className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                      key={state.stateCode}
+                      className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                     >
-                      <MapPin className="h-4 w-4 text-accent" />
-                      <span className="text-sm font-medium">{stateVisit.state_name}</span>
+                      <div className="flex items-center gap-2 flex-1">
+                        <MapPin className="h-4 w-4 text-accent flex-shrink-0" />
+                        <span className="text-sm font-medium">{state.stateName}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {state.visitedBy.length > 0 && (
+                          <div className="flex items-center gap-1">
+                            <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">
+                              {state.visitedBy.length === 1 
+                                ? state.visitedBy[0].split(' ')[0]
+                                : state.visitedBy.length === 2
+                                  ? state.visitedBy.map(n => n.split(' ')[0]).join(', ')
+                                  : `${state.visitedBy.length} travelers`
+                              }
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  ))}
+                  ));
+                })()}
               </div>
             </ScrollArea>
           </DialogContent>

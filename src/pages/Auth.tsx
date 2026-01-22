@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Plane, Loader2, Play, ArrowLeft } from "lucide-react";
+import { Loader2, Play, ArrowLeft, Plane } from "lucide-react";
+// import { Logo } from "@/components/common/Logo";
 import { z } from "zod";
 
 const emailSchema = z.string().email("Please enter a valid email address");
