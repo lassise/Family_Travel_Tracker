@@ -12,9 +12,9 @@ import { useVisitDetails } from "@/hooks/useVisitDetails";
 import CountryFlag from "@/components/common/CountryFlag";
 import ContinentBreakdownDialog from "./ContinentBreakdownDialog";
 import { getEffectiveFlagCode } from "@/lib/countriesData";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { toast } from "sonner";
+import ShareDashboardDialog from "@/components/sharing/ShareDashboardDialog";
+
 interface HeroSummaryCardProps {
   countries: Country[];
   familyMembers: FamilyMember[];
@@ -42,10 +42,10 @@ const HeroSummaryCard = memo(({
   const [showCountriesDialog, setShowCountriesDialog] = useState(false);
   const [showStatesDialog, setShowStatesDialog] = useState(false);
   const [showSinceDialog, setShowSinceDialog] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
   const resolvedHome = useHomeCountry(homeCountry);
   const { getStateVisitCount, stateVisits } = useStateVisits();
   const { visitDetails } = useVisitDetails();
-  const [shareLoading, setShareLoading] = useState(false);
   
   // Exclude home country from visited countries count
   const visitedCountries = useMemo(() => 
@@ -196,130 +196,12 @@ const HeroSummaryCard = memo(({
     [visitedCountries.length]
   );
 
-  const handleShareDashboard = async () => {
+  const handleShareDashboard = () => {
     if (!user) {
       navigate("/auth");
       return;
     }
-
-    setShareLoading(true);
-    try {
-      // Check if share profile exists
-      let { data: shareProfile, error: fetchError } = await supabase
-        .from("share_profiles")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (fetchError) {
-        console.error("Error fetching share profile:", fetchError);
-        toast.error(`Failed to load share profile: ${fetchError.message}`);
-        setShareLoading(false);
-        return;
-      }
-
-      // Create share profile if it doesn't exist
-      if (!shareProfile) {
-        const { data: newProfile, error: createError } = await supabase
-          .from("share_profiles")
-          .insert({
-            user_id: user.id,
-            is_public: true,
-            show_stats: true,
-            show_map: true,
-            show_countries: true,
-            show_cities: true,
-            show_achievements: true,
-            show_timeline: true,
-            show_photos: true, // Enable photos/memories
-            show_family_members: true,
-          })
-          .select()
-          .single();
-
-        if (createError) {
-          console.error("Error creating share profile:", createError);
-          toast.error(`Failed to create share profile: ${createError.message}`);
-          setShareLoading(false);
-          return;
-        }
-        shareProfile = newProfile;
-      }
-
-      // Prepare update data - ensure all dashboard-required fields are enabled
-      const updateData: any = {
-        is_public: true,
-        show_stats: true,
-        show_map: true,
-        show_countries: true,
-        show_photos: true, // Enable photos/memories for dashboard
-        show_timeline: true, // Enable timeline/memories for dashboard
-      };
-
-      // Generate dashboard_share_token if it doesn't exist
-      // Use type assertion since the column was just added via migration
-      const profileWithToken = shareProfile as typeof shareProfile & { dashboard_share_token?: string };
-      if (!profileWithToken.dashboard_share_token) {
-        // Generate a new token using the same method as share_token
-        const newToken = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('');
-        
-        updateData.dashboard_share_token = newToken;
-      }
-
-      // Update share profile with all necessary fields
-      const { data: updatedProfile, error: updateError } = await supabase
-        .from("share_profiles")
-        .update(updateData)
-        .eq("id", shareProfile.id)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error("Error updating share profile:", updateError);
-        // Check if it's a column doesn't exist error
-        if (updateError.message?.includes("column") && updateError.message?.includes("does not exist")) {
-          toast.error("Dashboard sharing not available yet. Please run database migrations.");
-        } else {
-          toast.error(`Failed to enable dashboard sharing: ${updateError.message}`);
-        }
-        setShareLoading(false);
-        return;
-      }
-
-      // Use updated profile or fallback to original - use type assertion for new column
-      const finalProfile = updatedProfile || shareProfile;
-      const finalProfileWithToken = finalProfile as typeof finalProfile & { dashboard_share_token?: string };
-      const dashboardToken = finalProfileWithToken.dashboard_share_token || updateData.dashboard_share_token;
-
-      if (!dashboardToken) {
-        toast.error("Dashboard token could not be generated. Please try again.");
-        setShareLoading(false);
-        return;
-      }
-
-      const dashboardUrl = `${window.location.origin}/dashboard/${dashboardToken}`;
-
-      if (navigator.share) {
-        await navigator.share({
-          title: "Our family travel dashboard",
-          text: "See our travel stats and analytics on Family Travel Tracker.",
-          url: dashboardUrl,
-        });
-      } else {
-        await navigator.clipboard.writeText(dashboardUrl);
-        toast.success("Dashboard link copied to clipboard!");
-      }
-    } catch (error: any) {
-      // User might have cancelled share dialog
-      if (error.name !== "AbortError") {
-        console.error("Unexpected error sharing dashboard:", error);
-        toast.error(`Failed to share dashboard: ${error.message || "Unknown error"}`);
-      }
-    } finally {
-      setShareLoading(false);
-    }
+    setShowShareDialog(true);
   };
 
   return (
@@ -344,7 +226,6 @@ const HeroSummaryCard = memo(({
               size="sm"
               className="hidden sm:inline-flex"
               onClick={handleShareDashboard}
-              disabled={shareLoading}
             >
               <Share2 className="h-4 w-4 mr-1" />
               Share dashboard
@@ -354,7 +235,6 @@ const HeroSummaryCard = memo(({
               size="icon"
               className="sm:hidden"
               onClick={handleShareDashboard}
-              disabled={shareLoading}
             >
               <Share2 className="h-4 w-4" />
             </Button>
@@ -649,6 +529,12 @@ const HeroSummaryCard = memo(({
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Share Dashboard Dialog */}
+      <ShareDashboardDialog
+        open={showShareDialog}
+        onOpenChange={setShowShareDialog}
+      />
     </Card>
   );
 });

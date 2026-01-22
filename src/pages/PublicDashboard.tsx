@@ -324,15 +324,22 @@ const PublicDashboard = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="max-w-md">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <Card className="max-w-md w-full">
           <CardContent className="pt-6 text-center">
             <Globe className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Dashboard Not Found</h2>
-            <p className="text-muted-foreground mb-4">{error}</p>
-            <Link to="/auth">
-              <Button>Sign Up to Create Your Dashboard</Button>
-            </Link>
+            <h2 className="text-xl font-semibold mb-2">Oops!</h2>
+            <p className="text-muted-foreground mb-6">Profile not found or is private</p>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Want to track your family's adventures?
+              </p>
+              <Link to="/auth">
+                <Button className="w-full">
+                  Sign up for Family Travel Tracker — it's free!
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -343,16 +350,19 @@ const PublicDashboard = () => {
     <div className="min-h-screen bg-background">
       {/* CTA Banner for non-users */}
       <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b border-primary/20">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="container mx-auto px-4 py-3 sm:py-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">
-                Sign up for free today to track your families travels, find the perfect flights, and plan your trip easily
+              <p className="text-sm sm:text-base font-medium text-foreground">
+                Want to track your family's adventures?
+              </p>
+              <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
+                Sign up for Family Travel Tracker for free
               </p>
             </div>
             <Link to="/auth">
-              <Button className="whitespace-nowrap">
-                Sign Up
+              <Button size="sm" className="whitespace-nowrap">
+                Sign Up Free
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
@@ -436,6 +446,25 @@ const PublicDashboard = () => {
             )}
           </div>
         )}
+
+        {/* Bottom CTA */}
+        <Card className="bg-gradient-to-r from-primary/5 via-background to-secondary/5 border-primary/20">
+          <CardContent className="py-8 text-center">
+            <Globe className="h-10 w-10 mx-auto text-primary mb-4" />
+            <h3 className="text-xl font-semibold mb-2">
+              Start Your Own Travel Journey
+            </h3>
+            <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+              Track your family's adventures, discover new destinations, and create lasting memories together.
+            </p>
+            <Link to="/auth">
+              <Button size="lg">
+                Sign Up for Free
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
