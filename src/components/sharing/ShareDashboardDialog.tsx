@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,99 +25,140 @@ interface ShareDashboardDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface ShareLink {
+interface ShareProfile {
   id: string;
-  owner_user_id: string;
-  token: string;
-  is_active: boolean;
-  include_stats: boolean;
-  include_countries: boolean;
-  include_memories: boolean;
+  dashboard_share_token: string | null;
+  is_public: boolean;
+  show_stats: boolean;
+  show_map: boolean;
+  show_countries: boolean;
+  show_photos: boolean;
 }
 
 const shareOptions = [
-  {
-    key: "include_stats",
-    label: "Stats",
-    description: "Home country + counts + since",
-    icon: Globe,
+  { 
+    key: "show_stats", 
+    label: "Hero Banner", 
+    description: "Stats summary & travel progress",
+    icon: Globe 
   },
-  {
-    key: "include_countries",
-    label: "Map & countries",
-    description: "Visited countries + map",
-    icon: MapPin,
+  { 
+    key: "show_map", 
+    label: "World Map", 
+    description: "Interactive map of visited countries",
+    icon: MapPin 
   },
-  {
-    key: "include_memories",
-    label: "Memories",
-    description: "Shareable photos",
-    icon: Camera,
+  { 
+    key: "show_countries", 
+    label: "Countries List", 
+    description: "List of all visited countries",
+    icon: Flag 
   },
-] as const;
+  { 
+    key: "show_photos", 
+    label: "Memories", 
+    description: "Photos and timeline",
+    icon: Camera 
+  },
+];
 
 export const ShareDashboardDialog = ({ open, onOpenChange }: ShareDashboardDialogProps) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
-  const [shareLink, setShareLink] = useState<ShareLink | null>(null);
   const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [shareProfile, setShareProfile] = useState<ShareProfile | null>(null);
+  const [pendingChanges, setPendingChanges] = useState<Partial<ShareProfile>>({});
 
   useEffect(() => {
     if (open && user) {
-      fetchOrCreateShareLink();
+      fetchOrCreateShareProfile();
     }
   }, [open, user]);
 
-  const generateToken = () => {
-    return Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-  };
-
-  const fetchOrCreateShareLink = async () => {
+  const fetchOrCreateShareProfile = async () => {
     if (!user) return;
     setLoading(true);
 
     try {
-      const { data: existing, error: fetchError } = await supabase
-        .from("share_links")
-        .select("id, owner_user_id, token, is_active, include_stats, include_countries, include_memories")
-        .eq("owner_user_id", user.id)
+      // Fetch existing share profile
+      let { data: profile, error } = await supabase
+        .from("share_profiles")
+        .select("id, dashboard_share_token, is_public, show_stats, show_map, show_countries, show_photos")
+        .eq("user_id", user.id)
         .maybeSingle();
 
-      if (fetchError) {
-        console.error("Error fetching share link:", fetchError);
+      if (error) {
+        console.error("Error fetching share profile:", error);
         toast.error("Failed to load sharing settings");
+        setLoading(false);
         return;
       }
 
-      if (existing) {
-        setShareLink(existing as ShareLink);
-        return;
+      // Create if doesn't exist with defaults (all enabled, public)
+      if (!profile) {
+        const newToken = generateToken();
+        const { data: newProfile, error: createError } = await supabase
+          .from("share_profiles")
+          .insert({
+            user_id: user.id,
+            is_public: true,
+            show_stats: true,
+            show_map: true,
+            show_countries: true,
+            show_photos: true,
+            show_cities: true,
+            show_achievements: true,
+            show_timeline: true,
+            show_family_members: true,
+            dashboard_share_token: newToken,
+          })
+          .select("id, dashboard_share_token, is_public, show_stats, show_map, show_countries, show_photos")
+          .single();
+
+        if (createError) {
+          console.error("Error creating share profile:", createError);
+          toast.error("Failed to create sharing settings");
+          setLoading(false);
+          return;
+        }
+        profile = newProfile;
       }
 
-      const newToken = generateToken();
-      const { data: created, error: createError } = await supabase
-        .from("share_links")
-        .insert({
-          owner_user_id: user.id,
-          token: newToken,
-          is_active: true,
-          include_stats: true,
-          include_countries: true,
-          include_memories: true,
-        })
-        .select("id, owner_user_id, token, is_active, include_stats, include_countries, include_memories")
-        .single();
+      // Generate dashboard token if missing
+      if (!profile.dashboard_share_token) {
+        const newToken = generateToken();
+        const { data: updatedProfile, error: updateError } = await supabase
+          .from("share_profiles")
+          .update({ 
+            dashboard_share_token: newToken,
+            is_public: true 
+          })
+          .eq("id", profile.id)
+          .select("id, dashboard_share_token, is_public, show_stats, show_map, show_countries, show_photos")
+          .single();
 
-      if (createError) {
-        console.error("Error creating share link:", createError);
-        toast.error("Failed to create share link");
-        return;
+        if (!updateError && updatedProfile) {
+          profile = updatedProfile;
+        }
       }
 
-      setShareLink(created as ShareLink);
+      // Ensure it's public
+      if (!profile.is_public) {
+        const { data: updatedProfile, error: updateError } = await supabase
+          .from("share_profiles")
+          .update({ is_public: true })
+          .eq("id", profile.id)
+          .select("id, dashboard_share_token, is_public, show_stats, show_map, show_countries, show_photos")
+          .single();
+
+        if (!updateError && updatedProfile) {
+          profile = updatedProfile;
+        }
+      }
+
+      setShareProfile(profile as ShareProfile);
+      setPendingChanges({});
     } catch (err) {
       console.error("Unexpected error:", err);
       toast.error("Something went wrong");
@@ -126,36 +167,42 @@ export const ShareDashboardDialog = ({ open, onOpenChange }: ShareDashboardDialo
     }
   };
 
-  const shareUrl = useMemo(() => {
-    if (!shareLink?.token) return "";
-    return `${window.location.origin}/share/${shareLink.token}`;
-  }, [shareLink]);
+  const generateToken = () => {
+    return Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  };
 
-  const handleToggle = async (key: keyof ShareLink, value: boolean) => {
-    if (!shareLink) return;
-    setSaving(true);
-    const previous = shareLink;
-    setShareLink({ ...shareLink, [key]: value } as ShareLink);
+  const handleToggle = async (key: keyof ShareProfile, value: boolean) => {
+    if (!shareProfile) return;
 
-    const { data, error } = await supabase
-      .from("share_links")
+    // Optimistically update UI
+    setShareProfile(prev => prev ? { ...prev, [key]: value } : null);
+
+    // Save to database
+    const { error } = await supabase
+      .from("share_profiles")
       .update({ [key]: value })
-      .eq("id", shareLink.id)
-      .select("id, owner_user_id, token, is_active, include_stats, include_countries, include_memories")
-      .single();
+      .eq("id", shareProfile.id);
 
-    if (error || !data) {
-      setShareLink(previous);
+    if (error) {
+      // Revert on error
+      setShareProfile(prev => prev ? { ...prev, [key]: !value } : null);
       toast.error("Failed to update setting");
     }
-    setSaving(false);
+  };
+
+  const getShareUrl = () => {
+    if (!shareProfile?.dashboard_share_token) return "";
+    return `${window.location.origin}/dashboard/${shareProfile.dashboard_share_token}`;
   };
 
   const handleCopyLink = async () => {
-    if (!shareUrl) return;
+    const url = getShareUrl();
+    if (!url) return;
 
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(url);
       setCopied(true);
       toast.success("Link copied to clipboard!");
       setTimeout(() => setCopied(false), 2000);
@@ -165,19 +212,15 @@ export const ShareDashboardDialog = ({ open, onOpenChange }: ShareDashboardDialo
   };
 
   const handleShare = async () => {
-    if (!shareUrl) return;
-
-    if (!shareLink?.is_active) {
-      toast.error("This link is disabled. Turn it back on to share.");
-      return;
-    }
+    const url = getShareUrl();
+    if (!url) return;
 
     if (navigator.share) {
       try {
         await navigator.share({
           title: "My Family Travel Dashboard",
           text: "Check out our family's travel adventures!",
-          url: shareUrl,
+          url: url,
         });
       } catch (err: any) {
         if (err.name !== "AbortError") {
@@ -190,8 +233,9 @@ export const ShareDashboardDialog = ({ open, onOpenChange }: ShareDashboardDialo
   };
 
   const handleOpenPreview = () => {
-    if (shareUrl) {
-      window.open(shareUrl, "_blank");
+    const url = getShareUrl();
+    if (url) {
+      window.open(url, "_blank");
     }
   };
 
@@ -212,14 +256,14 @@ export const ShareDashboardDialog = ({ open, onOpenChange }: ShareDashboardDialo
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : shareLink ? (
+        ) : shareProfile ? (
           <div className="space-y-4">
             {/* Share Link */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Your Share Link</Label>
               <div className="flex gap-2">
                 <Input
-                  value={shareUrl}
+                  value={getShareUrl()}
                   readOnly
                   className="text-xs font-mono bg-muted"
                 />
@@ -230,7 +274,7 @@ export const ShareDashboardDialog = ({ open, onOpenChange }: ShareDashboardDialo
                   className="shrink-0"
                 >
                   {copied ? (
-                    <Check className="h-4 w-4 text-primary" />
+                    <Check className="h-4 w-4 text-green-500" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}
@@ -246,19 +290,6 @@ export const ShareDashboardDialog = ({ open, onOpenChange }: ShareDashboardDialo
               </div>
             </div>
 
-            {/* Disable link */}
-            <div className="flex items-center justify-between p-3 rounded-lg border bg-card">
-              <div className="space-y-0.5">
-                <Label className="text-sm font-medium">Link active</Label>
-                <p className="text-xs text-muted-foreground">Turn off to disable the shared page.</p>
-              </div>
-              <Switch
-                checked={shareLink.is_active}
-                onCheckedChange={(v) => handleToggle("is_active", v)}
-                disabled={saving}
-              />
-            </div>
-
             <Separator />
 
             {/* Share Options */}
@@ -266,7 +297,7 @@ export const ShareDashboardDialog = ({ open, onOpenChange }: ShareDashboardDialo
               <Label className="text-sm font-medium">What to share</Label>
               {shareOptions.map((option) => {
                 const Icon = option.icon;
-                const isEnabled = shareLink[option.key as keyof ShareLink] as boolean;
+                const isEnabled = shareProfile[option.key as keyof ShareProfile] as boolean;
                 
                 return (
                   <div 
@@ -284,8 +315,7 @@ export const ShareDashboardDialog = ({ open, onOpenChange }: ShareDashboardDialo
                     </div>
                     <Switch
                       checked={isEnabled}
-                      onCheckedChange={(v) => handleToggle(option.key as keyof ShareLink, v)}
-                      disabled={saving}
+                      onCheckedChange={(v) => handleToggle(option.key as keyof ShareProfile, v)}
                     />
                   </div>
                 );
@@ -295,7 +325,7 @@ export const ShareDashboardDialog = ({ open, onOpenChange }: ShareDashboardDialo
             <Separator />
 
             {/* Share Button */}
-            <Button onClick={handleShare} className="w-full" disabled={!shareLink.is_active}>
+            <Button onClick={handleShare} className="w-full">
               <Share2 className="h-4 w-4 mr-2" />
               Share Dashboard
             </Button>
