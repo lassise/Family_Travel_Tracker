@@ -98,6 +98,16 @@ const TripCollaboratorsDialog = ({ tripId, tripTitle }: TripCollaboratorsDialogP
     }
   };
 
+  // Generate email hash client-side using the same algorithm as the database
+  const hashEmail = async (email: string): Promise<string> => {
+    const normalizedEmail = email.toLowerCase().trim() + 'trip_collab_salt_v1';
+    const encoder = new TextEncoder();
+    const data = encoder.encode(normalizedEmail);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
   const handleInvite = async () => {
     if (!inviteEmail.trim() || !user) return;
 
@@ -117,10 +127,14 @@ const TripCollaboratorsDialog = ({ tripId, tripTitle }: TripCollaboratorsDialogP
         .eq("email", inviteEmail.toLowerCase())
         .single();
 
+      // Generate the email hash for privacy
+      const emailHash = await hashEmail(inviteEmail);
+
       const { error } = await supabase.from("trip_collaborators").insert({
         trip_id: tripId,
         user_id: existingUser?.id || null,
         invited_email: inviteEmail.toLowerCase(),
+        invited_email_hash: emailHash,
         permission: invitePermission,
         invited_by: user.id,
         status: "pending",

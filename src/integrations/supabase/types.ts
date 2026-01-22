@@ -1483,6 +1483,7 @@ export type Database = {
           id: string
           invited_by: string
           invited_email: string | null
+          invited_email_hash: string | null
           permission: string
           status: string
           trip_id: string
@@ -1494,6 +1495,7 @@ export type Database = {
           id?: string
           invited_by: string
           invited_email?: string | null
+          invited_email_hash?: string | null
           permission?: string
           status?: string
           trip_id: string
@@ -1505,6 +1507,7 @@ export type Database = {
           id?: string
           invited_by?: string
           invited_email?: string | null
+          invited_email_hash?: string | null
           permission?: string
           status?: string
           trip_id?: string
@@ -2046,6 +2049,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      hash_email: { Args: { email: string }; Returns: string }
       is_group_member: {
         Args: { _group_id: string; _user_id: string }
         Returns: boolean
