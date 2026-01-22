@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Offset for anchor scrolling (adjust value based on your header height) */
+.scroll-mt-4 {
+  scroll-margin-top: 1rem;
+}
+
+/* Optional: Highlight section when scrolled to */
+section:target {
+  animation: highlight 2s ease-in-out;
+}
+
+@keyframes highlight {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: rgba(59, 130, 246, 0.1); }
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */

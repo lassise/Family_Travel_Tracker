@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useCallback, useState } from "react";
+// AUDIT RESULTS:
+// Dashboard: /src/pages/Dashboard.tsx
+// Quick Actions: Line 273-367 in Dashboard.tsx
+//   - Analytics button: Line 294 - navigates to /family?tab=analytics
+//   - Achievements button: Line 309 - navigates to /family?tab=achievements
+// Analytics: /src/components/travel/AnalyticsInsightCard.tsx (displays continent progress, charts)
+// Achievements: /src/components/travel/EnhancedAchievements.tsx (displays badges, progress, goals)
+// Travel Tracker: Lines 233-271 in Dashboard.tsx (HeroSummaryCard, InteractiveWorldMap, TravelMilestones) - DO NOT MODIFY
+
+import { useEffect, useMemo, useCallback, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
@@ -16,6 +25,8 @@ import HeroSummaryCard from "@/components/travel/HeroSummaryCard";
 import DashboardMemberFilter from "@/components/travel/DashboardMemberFilter";
 import InteractiveWorldMap from "@/components/travel/InteractiveWorldMap";
 import TravelMilestones from "@/components/travel/TravelMilestones";
+import AnalyticsInsightCard from "@/components/travel/AnalyticsInsightCard";
+import EnhancedAchievements from "@/components/travel/EnhancedAchievements";
 import { 
   Plus, 
   Plane, 
@@ -41,6 +52,18 @@ const Dashboard = () => {
   const resolvedHome = useHomeCountry(homeCountry);
   const navigate = useNavigate();
   const [visitMemberMap, setVisitMemberMap] = useState<globalThis.Map<string, string[]>>(() => new globalThis.Map());
+  
+  // Refs for smooth scrolling
+  const analyticsRef = useRef<HTMLDivElement>(null);
+  const achievementsRef = useRef<HTMLDivElement>(null);
+  const travelTrackerRef = useRef<HTMLDivElement>(null);
+
+  const scrollToSection = (ref: React.RefObject<HTMLDivElement>) => {
+    ref.current?.scrollIntoView({ 
+      behavior: 'smooth',
+      block: 'start'
+    });
+  };
 
   // Dashboard filter state
   const {
@@ -230,45 +253,39 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {/* Hero Summary - Countries Visited Overview */}
-        <div className="mb-8">
-          <HeroSummaryCard 
-            countries={filteredCountries} 
-            familyMembers={familyMembers} 
-            totalContinents={filteredContinents}
-            homeCountry={homeCountry}
-            earliestYear={filteredEarliestYear}
-            visitMemberMap={visitMemberMap}
-            selectedMemberId={selectedMemberId}
-            filterComponent={
-              <DashboardMemberFilter
-                familyMembers={familyMembers}
-                selectedMemberId={selectedMemberId}
-                onSelectMember={setSelectedMemberId}
-              />
-            }
-          />
-        </div>
+        {/* Travel Tracker Section - DO NOT MODIFY */}
+        <section ref={travelTrackerRef} className="mb-12 scroll-mt-4">
+          {/* Hero Summary - Countries Visited Overview */}
+          <div className="mb-8">
+            <HeroSummaryCard 
+              countries={filteredCountries} 
+              familyMembers={familyMembers} 
+              totalContinents={filteredContinents}
+              homeCountry={homeCountry}
+              earliestYear={filteredEarliestYear}
+              visitMemberMap={visitMemberMap}
+              selectedMemberId={selectedMemberId}
+              filterComponent={
+                <DashboardMemberFilter
+                  familyMembers={familyMembers}
+                  selectedMemberId={selectedMemberId}
+                  onSelectMember={setSelectedMemberId}
+                />
+              }
+            />
+          </div>
 
-        {/* Interactive World Map */}
-        <div className="mb-8">
-          <InteractiveWorldMap 
-            countries={countries} 
-            wishlist={wishlist} 
-            homeCountry={homeCountry}
-            onRefetch={refetchFamilyData}
-            selectedMemberId={selectedMemberId}
-          />
-        </div>
-
-        {/* Travel Milestones */}
-        <div className="mb-8">
-          <TravelMilestones 
-            countries={countries} 
-            familyMembers={familyMembers} 
-            totalContinents={totalContinents} 
-          />
-        </div>
+          {/* Interactive World Map */}
+          <div className="mb-8">
+            <InteractiveWorldMap 
+              countries={countries} 
+              wishlist={wishlist} 
+              homeCountry={homeCountry}
+              onRefetch={refetchFamilyData}
+              selectedMemberId={selectedMemberId}
+            />
+          </div>
+        </section>
 
         {/* Quick Actions */}
         <section className="mb-8">
@@ -291,7 +308,7 @@ const Dashboard = () => {
 
             <Card 
               className="cursor-pointer hover:shadow-travel transition-all hover:border-primary/50 group"
-              onClick={() => navigate("/family?tab=analytics")}
+              onClick={() => scrollToSection(analyticsRef)}
             >
               <CardContent className="flex flex-col items-center gap-3 p-4 text-center">
                 <div className="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -306,7 +323,7 @@ const Dashboard = () => {
 
             <Card 
               className="cursor-pointer hover:shadow-travel transition-all hover:border-primary/50 group"
-              onClick={() => navigate("/family?tab=achievements")}
+              onClick={() => scrollToSection(achievementsRef)}
             >
               <CardContent className="flex flex-col items-center gap-3 p-4 text-center">
                 <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -366,6 +383,15 @@ const Dashboard = () => {
           </div>
         </section>
 
+        {/* Travel Milestones */}
+        <div className="mb-8">
+          <TravelMilestones 
+            countries={countries} 
+            familyMembers={familyMembers} 
+            totalContinents={totalContinents} 
+          />
+        </div>
+
         {/* Active Trip Alert */}
         {activeTrips.length > 0 && (
           <Card className="mb-8 border-primary bg-primary/5">
@@ -389,10 +415,26 @@ const Dashboard = () => {
           </Card>
         )}
 
+        {/* Analytics Section - Embedded in Dashboard */}
+        <section ref={analyticsRef} className="mb-12 scroll-mt-4">
+          <h2 className="text-3xl font-bold mb-6">Analytics</h2>
+          <AnalyticsInsightCard countries={filteredCountries} />
+        </section>
+
+        {/* Achievements Section - Embedded in Dashboard */}
+        <section ref={achievementsRef} className="mb-12 scroll-mt-4">
+          <h2 className="text-3xl font-bold mb-6">Achievements</h2>
+          <EnhancedAchievements 
+            countries={filteredCountries} 
+            familyMembers={familyMembers}
+            totalContinents={filteredContinents}
+          />
+        </section>
+
         {/* Upcoming Trips */}
-        <section className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Upcoming Trips</h2>
+        <section className="mb-12 scroll-mt-4">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-3xl font-bold">Upcoming Trips</h2>
             <Link to="/trips" className="text-sm text-primary hover:underline">
               View all
             </Link>
@@ -416,7 +458,28 @@ const Dashboard = () => {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {upcomingTrips.slice(0, 3).map((trip) => (
+              {/* AI Travel Planner Card - Always First */}
+              <Card 
+                className="cursor-pointer hover:shadow-md transition-shadow overflow-hidden border-primary/20 bg-gradient-to-br from-primary/5 to-secondary/5"
+                onClick={() => navigate("/trips/new")}
+              >
+                <CardContent className="flex flex-col items-center justify-center py-12 text-center h-full">
+                  <div className="w-16 h-16 rounded-full bg-gradient-hero flex items-center justify-center mb-4">
+                    <Sparkles className="h-8 w-8 text-primary-foreground" />
+                  </div>
+                  <h3 className="font-semibold mb-2 text-lg">Use AI Travel Planner</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Plan Your Next Trip
+                  </p>
+                  <Button variant="outline" size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Get Started
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Existing Upcoming Trips */}
+              {upcomingTrips.slice(0, 2).map((trip) => (
                 <Card 
                   key={trip.id}
                   className="cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
@@ -462,56 +525,6 @@ const Dashboard = () => {
           )}
         </section>
 
-        {/* Stats Summary */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Your Travel Stats</h2>
-            <Link to="/family?tab=analytics" className="text-sm text-primary hover:underline">
-              View detailed analytics
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-6">
-                <Globe className="h-8 w-8 text-primary mb-2" />
-                <p className="text-3xl font-bold">{visitedCountriesCount}</p>
-                <p className="text-sm text-muted-foreground">Countries Visited</p>
-              </CardContent>
-            </Card>
-            {resolvedHome.hasStateTracking && (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-6">
-                  <MapPin className="h-8 w-8 text-accent mb-2" />
-                  <p className="text-3xl font-bold">{statesVisitedCount}/50</p>
-                  <p className="text-sm text-muted-foreground">States Visited</p>
-                </CardContent>
-              </Card>
-            )}
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-6">
-                <Map className="h-8 w-8 text-secondary mb-2" />
-                <p className="text-3xl font-bold">{filteredContinents}</p>
-                <p className="text-sm text-muted-foreground">Continents</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-6">
-                <Plane className="h-8 w-8 text-accent mb-2" />
-                <p className="text-3xl font-bold">{trips.length}</p>
-                <p className="text-sm text-muted-foreground">Planned Trips</p>
-              </CardContent>
-            </Card>
-            {!resolvedHome.hasStateTracking && (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-6">
-                  <Trophy className="h-8 w-8 text-primary mb-2" />
-                  <p className="text-3xl font-bold">{familyMembers.length}</p>
-                  <p className="text-sm text-muted-foreground">Family Members</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </section>
       </div>
     </AppLayout>
   );

@@ -12,9 +12,9 @@ import { useVisitDetails } from "@/hooks/useVisitDetails";
 import CountryFlag from "@/components/common/CountryFlag";
 import ContinentBreakdownDialog from "./ContinentBreakdownDialog";
 import { getEffectiveFlagCode } from "@/lib/countriesData";
+import { ShareDialog, ShareOption } from "@/components/sharing/ShareDialog";
+import { generateShareToken } from "@/lib/share-tokens";
 import { useAuth } from "@/hooks/useAuth";
-import ShareDashboardDialog from "@/components/sharing/ShareDashboardDialog";
-
 interface HeroSummaryCardProps {
   countries: Country[];
   familyMembers: FamilyMember[];
@@ -196,12 +196,42 @@ const HeroSummaryCard = memo(({
     [visitedCountries.length]
   );
 
-  const handleShareDashboard = () => {
+  const dashboardShareOptions: ShareOption[] = [
+    {
+      id: 'countries',
+      label: 'Include countries visited',
+      description: 'Show list of countries you\'ve traveled to',
+      defaultChecked: true,
+    },
+    {
+      id: 'stats',
+      label: 'Include travel statistics',
+      description: 'Show countries count, continents, and progress',
+      defaultChecked: true,
+    },
+    {
+      id: 'states',
+      label: 'Include states/provinces',
+      description: 'Show visited states or provinces in your home country',
+      defaultChecked: resolvedHome.hasStateTracking,
+    },
+    {
+      id: 'timeline',
+      label: 'Include travel timeline',
+      description: 'Show when you started traveling',
+      defaultChecked: false,
+    },
+  ];
+
+  const handleGenerateDashboardLink = async (selectedOptions: string[]): Promise<string> => {
     if (!user) {
-      navigate("/auth");
-      return;
+      throw new Error('You must be logged in to generate a share link');
     }
-    setShowShareDialog(true);
+    return await generateShareToken({
+      userId: user.id,
+      shareType: 'dashboard',
+      includedFields: selectedOptions,
+    });
   };
 
   return (
@@ -225,7 +255,7 @@ const HeroSummaryCard = memo(({
               variant="outline"
               size="sm"
               className="hidden sm:inline-flex"
-              onClick={handleShareDashboard}
+              onClick={() => setShowShareDialog(true)}
             >
               <Share2 className="h-4 w-4 mr-1" />
               Share dashboard
@@ -234,7 +264,7 @@ const HeroSummaryCard = memo(({
               variant="outline"
               size="icon"
               className="sm:hidden"
-              onClick={handleShareDashboard}
+              onClick={() => setShowShareDialog(true)}
             >
               <Share2 className="h-4 w-4" />
             </Button>
@@ -530,10 +560,15 @@ const HeroSummaryCard = memo(({
         </Dialog>
       )}
 
-      {/* Share Dashboard Dialog */}
-      <ShareDashboardDialog
+      {/* Share Dialog */}
+      <ShareDialog
         open={showShareDialog}
         onOpenChange={setShowShareDialog}
+        title="Share My Dashboard"
+        description="Create a shareable link to your travel dashboard"
+        shareType="dashboard"
+        options={dashboardShareOptions}
+        onGenerateLink={handleGenerateDashboardLink}
       />
     </Card>
   );

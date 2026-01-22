@@ -27,6 +27,8 @@ import DashboardMemberFilter from "@/components/travel/DashboardMemberFilter";
 import { Button } from "@/components/ui/button";
 import { Loader2, BarChart3, Globe2, Trophy, Map as MapIcon, Camera, Users, MapPin, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ShareDialog, ShareOption } from "@/components/sharing/ShareDialog";
+import { generateShareToken } from "@/lib/share-tokens";
 
 type TabKey = 'overview' | 'countries' | 'memories';
 
@@ -46,8 +48,7 @@ const TravelHistory = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [visitMemberMap, setVisitMemberMap] = useState<globalThis.Map<string, string[]>>(() => new globalThis.Map());
-  const [shareLink, setShareLink] = useState<string | null>(null);
-  const [shareLoading, setShareLoading] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
   
   // Read tab from URL or default to 'countries' for the Travel Tracker tab
   const tabFromUrl = searchParams.get('tab') as TabKey | null;
@@ -167,57 +168,42 @@ const TravelHistory = () => {
     ? getStateVisitCount(resolvedHome.iso2) 
     : 0;
 
-  // Load share profile to build a reusable highlights link for sharing visited countries
-  useEffect(() => {
-    const loadShareProfile = async () => {
-      if (!user) return;
-      try {
-        const { data, error } = await supabase
-          .from("share_profiles")
-          .select("share_token,is_public")
-          .eq("user_id", user.id)
-          .maybeSingle();
+  const dashboardShareOptions: ShareOption[] = [
+    {
+      id: 'countries',
+      label: 'Include countries visited',
+      description: 'Show list of countries you\'ve traveled to',
+      defaultChecked: true,
+    },
+    {
+      id: 'stats',
+      label: 'Include travel statistics',
+      description: 'Show countries count, continents, and progress',
+      defaultChecked: true,
+    },
+    {
+      id: 'states',
+      label: 'Include states/provinces',
+      description: 'Show visited states or provinces in your home country',
+      defaultChecked: resolvedHome.hasStateTracking,
+    },
+    {
+      id: 'timeline',
+      label: 'Include travel timeline',
+      description: 'Show when you started traveling',
+      defaultChecked: false,
+    },
+  ];
 
-        if (!error && data && data.is_public && data.share_token) {
-          setShareLink(`${window.location.origin}/highlights/${data.share_token}`);
-        }
-      } catch {
-        // Fail silently; Share button will route to Profile instead.
-      }
-    };
-    loadShareProfile();
-  }, [user]);
-
-  const handleShareTravel = async () => {
+  const handleGenerateDashboardLink = async (selectedOptions: string[]): Promise<string> => {
     if (!user) {
-      navigate("/auth");
-      return;
+      throw new Error('You must be logged in to generate a share link');
     }
-
-    // No public share profile yet – send user to Profile to enable sharing.
-    if (!shareLink) {
-      navigate("/profile");
-      return;
-    }
-
-    setShareLoading(true);
-    try {
-      // Prefer native share sheet when available
-      if (navigator.share) {
-        await navigator.share({
-          title: "My family travel map",
-          text: "Check out the countries we've visited with Family Travel Tracker.",
-          url: shareLink,
-        });
-      } else {
-        await navigator.clipboard.writeText(shareLink);
-        window.open(shareLink, "_blank", "noopener,noreferrer");
-      }
-    } catch {
-      // Swallow errors – user might have cancelled share dialog
-    } finally {
-      setShareLoading(false);
-    }
+    return await generateShareToken({
+      userId: user.id,
+      shareType: 'dashboard',
+      includedFields: selectedOptions,
+    });
   };
 
   return (
@@ -255,24 +241,34 @@ const TravelHistory = () => {
                   </div>
                 </div>
 
-                {/* Share button → shares the public highlights link for countries visited */}
+                {/* Share button */}
                 <Button
                   variant="outline"
                   size="sm"
                   className="ml-2 hidden sm:inline-flex"
-                  onClick={handleShareTravel}
-                  disabled={shareLoading}
+                  onClick={() => {
+                    if (!user) {
+                      navigate("/auth");
+                      return;
+                    }
+                    setShowShareDialog(true);
+                  }}
                 >
                   <Share2 className="h-4 w-4 mr-1" />
-                  {shareLink ? "Share" : "Set up sharing"}
+                  Share
                 </Button>
                 {/* Compact icon-only share button for mobile */}
                 <Button
                   variant="outline"
                   size="icon"
                   className="sm:hidden ml-2"
-                  onClick={handleShareTravel}
-                  disabled={shareLoading}
+                  onClick={() => {
+                    if (!user) {
+                      navigate("/auth");
+                      return;
+                    }
+                    setShowShareDialog(true);
+                  }}
                 >
                   <Share2 className="h-4 w-4" />
                 </Button>
@@ -393,6 +389,17 @@ const TravelHistory = () => {
           )}
         </div>
       </div>
+
+      {/* Share Dialog */}
+      <ShareDialog
+        open={showShareDialog}
+        onOpenChange={setShowShareDialog}
+        title="Share My Travel History"
+        description="Create a shareable link to your travel dashboard"
+        shareType="dashboard"
+        options={dashboardShareOptions}
+        onGenerateLink={handleGenerateDashboardLink}
+      />
     </AppLayout>
   );
 };
