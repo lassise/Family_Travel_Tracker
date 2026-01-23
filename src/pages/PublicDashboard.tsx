@@ -213,7 +213,7 @@ const PublicDashboard = () => {
               <p className="text-sm text-muted-foreground">
                 Want to track your family's adventures?
               </p>
-              <Link to="/auth?mode=signup">
+              <Link to="/auth">
                 <Button className="w-full">
                   Sign up for Family Travel Tracker — it's free!
                 </Button>
@@ -247,7 +247,7 @@ const PublicDashboard = () => {
                 Sign up for Family Travel Tracker for free
               </p>
             </div>
-            <Link to="/auth?mode=signup">
+            <Link to="/auth">
               <Button size="sm" className="whitespace-nowrap">
                 Sign Up Free
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -290,20 +290,18 @@ const PublicDashboard = () => {
           </div>
         )}
 
-        {/* Interactive World Map - responsive height for mobile */}
+        {/* Interactive World Map */}
         {shareSettings.show_map && (
           <div className="mb-8">
-            <div className="h-[300px] sm:h-[400px] md:h-[450px] lg:h-[500px] mb-16">
-              <InteractiveWorldMap
-                countries={countries}
-                wishlist={[]}
-                homeCountry={owner.homeCountry || null}
-                onRefetch={() => {}}
-                selectedMemberId={null}
-                readOnly
-                stateVisitsOverride={stateVisits}
-              />
-            </div>
+            <InteractiveWorldMap
+              countries={countries}
+              wishlist={[]}
+              homeCountry={owner.homeCountry || null}
+              onRefetch={() => {}}
+              selectedMemberId={null}
+              readOnly
+              stateVisitsOverride={stateVisits}
+            />
           </div>
         )}
 
@@ -347,7 +345,7 @@ const PublicDashboard = () => {
             <p className="text-muted-foreground mb-4 max-w-md mx-auto">
               Track your family's adventures, discover new destinations, and create lasting memories together.
             </p>
-            <Link to="/auth?mode=signup">
+            <Link to="/auth">
               <Button size="lg">
                 Sign Up for Free
                 <ArrowRight className="ml-2 h-4 w-4" />
