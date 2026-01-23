@@ -37,8 +37,38 @@ serve(async (req) => {
     // Try with all possible column combinations to handle schema variations
     let shareLink: any = null;
     let queryError: any = null;
+    let debugInfo: any = {
+      token_searched: tokenNormalized,
+      attempts: [] as any[]
+    };
 
-    // First try: Full query with new schema
+    // Strategy 1: Try minimal query first (just token and id) to see if record exists
+    try {
+      const { data: minimalData, error: minimalError } = await supabaseAdmin
+        .from("share_links")
+        .select("token, id")
+        .eq("token", tokenNormalized)
+        .maybeSingle();
+      
+      debugInfo.attempts.push({
+        strategy: "minimal_query",
+        found: !!minimalData,
+        error: minimalError?.message
+      });
+
+      if (minimalData && !minimalError) {
+        console.log("Token exists! Fetching full record...");
+      } else if (minimalError) {
+        console.log("Minimal query error:", minimalError.message);
+      }
+    } catch (e: any) {
+      debugInfo.attempts.push({
+        strategy: "minimal_query",
+        error: e.message
+      });
+    }
+
+    // Strategy 2: Full query with new schema (owner_user_id)
     try {
       const { data, error } = await supabaseAdmin
         .from("share_links")
@@ -46,16 +76,28 @@ serve(async (req) => {
         .eq("token", tokenNormalized)
         .maybeSingle();
       
+      debugInfo.attempts.push({
+        strategy: "full_query_new_schema",
+        found: !!data,
+        error: error?.message,
+        columns_found: data ? Object.keys(data) : []
+      });
+      
       if (!error && data) {
         shareLink = data;
+        console.log("Found with new schema, columns:", Object.keys(data));
       } else if (error && !error.message.includes('column') && !error.message.includes('does not exist')) {
         queryError = error;
       }
     } catch (e: any) {
-      queryError = e;
+      debugInfo.attempts.push({
+        strategy: "full_query_new_schema",
+        error: e.message
+      });
+      if (!queryError) queryError = e;
     }
 
-    // If that failed, try with old schema columns
+    // Strategy 3: Try with old schema columns (user_id instead of owner_user_id)
     if (!shareLink && !queryError) {
       try {
         const { data, error } = await supabaseAdmin
@@ -64,17 +106,73 @@ serve(async (req) => {
           .eq("token", tokenNormalized)
           .maybeSingle();
         
+        debugInfo.attempts.push({
+          strategy: "old_schema_query",
+          found: !!data,
+          error: error?.message
+        });
+        
         if (!error && data) {
           shareLink = data;
+          console.log("Found with old schema");
         } else {
           queryError = error;
         }
       } catch (e: any) {
+        debugInfo.attempts.push({
+          strategy: "old_schema_query",
+          error: e.message
+        });
         queryError = e;
       }
     }
 
-    console.log("Query result:", { shareLink: !!shareLink, error: queryError?.message });
+    // Strategy 4: Try case-insensitive search (in case token wasn't normalized on insert)
+    if (!shareLink && !queryError) {
+      try {
+        const { data: allLinks, error: listError } = await supabaseAdmin
+          .from("share_links")
+          .select("token, id")
+          .limit(100);
+        
+        if (!listError && allLinks) {
+          const found = allLinks.find((link: any) => 
+            link.token?.toLowerCase() === tokenNormalized
+          );
+          
+          debugInfo.attempts.push({
+            strategy: "case_insensitive_search",
+            found: !!found,
+            total_links_checked: allLinks.length
+          });
+          
+          if (found) {
+            // Found it! Now fetch the full record
+            const { data: fullData, error: fullError } = await supabaseAdmin
+              .from("share_links")
+              .select("*")
+              .eq("id", found.id)
+              .single();
+            
+            if (!fullError && fullData) {
+              shareLink = fullData;
+              console.log("Found via case-insensitive search!");
+            }
+          }
+        }
+      } catch (e: any) {
+        debugInfo.attempts.push({
+          strategy: "case_insensitive_search",
+          error: e.message
+        });
+      }
+    }
+
+    console.log("Query result:", { 
+      shareLink: !!shareLink, 
+      error: queryError?.message,
+      debug: debugInfo
+    });
 
     if (queryError) {
       return new Response(
@@ -94,7 +192,8 @@ serve(async (req) => {
           ok: false,
           error: "Share link not found",
           token: tokenNormalized,
-          hint: "Token may not exist in database"
+          hint: "Token may not exist in database. Check if share link was created successfully.",
+          debug: debugInfo
         }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
