@@ -81,13 +81,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           ok: false,
           error: "Invalid or missing token",
-          debug: { 
-            token_provided: !!token, 
-            token_format_valid: false,
-            token_received: token ? `${token.substring(0, 8)}...` : null,
-            token_length: token?.length || 0,
-            token_normalized: tokenNormalized || null
-          },
+          debug: { token_provided: !!token, token_format_valid: false },
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -116,171 +110,33 @@ Deno.serve(async (req) => {
 
     // Step 1: Try new share_links table first
     (debug.query_steps as string[]).push("lookup_share_links");
-    
-    // Try with owner_user_id first (new schema)
-    let shareLink: any = null;
-    let shareLinkError: any = null;
-    
-    // First attempt: Try to find share link - handle both schemas gracefully
-    // Query without is_active filter first to avoid errors if column doesn't exist
-    let shareLinkNew: any = null;
-    let errorNew: any = null;
-    
-    // Try querying with all possible column combinations
-    try {
-      // Attempt 1: Try with owner_user_id (new schema)
-      const result1 = await supabase
-        .from("share_links")
-        .select("*")
-        .eq("token", tokenNormalized)
-        .maybeSingle();
-      
-      if (!result1.error && result1.data) {
-        shareLinkNew = result1.data;
-      } else if (result1.error && !result1.error.message.includes('column') && !result1.error.message.includes('does not exist')) {
-        // Only set error if it's not a schema issue
-        errorNew = result1.error;
-      }
-      
-      // If that failed with a column error, try with user_id (old schema)
-      if (!shareLinkNew && result1.error && (result1.error.message.includes('owner_user_id') || result1.error.code === '42703')) {
-        const result2 = await supabase
-          .from("share_links")
-          .select("id, token, user_id, share_type, item_id, included_fields, created_at, expires_at, view_count")
-          .eq("token", tokenNormalized)
-          .maybeSingle();
-        
-        if (!result2.error && result2.data) {
-          shareLinkNew = result2.data;
-        } else {
-          errorNew = result2.error;
-        }
-      }
-    } catch (err: any) {
-      errorNew = err;
-      (debug.failures as string[]).push(`share_links query exception: ${err.message}`);
-    }
-    
-    // If still no result, try a minimal query (just token and id) to see if record exists
-    if (!shareLinkNew && !errorNew) {
-      try {
-        const minimalResult = await supabase
-          .from("share_links")
-          .select("token, id")
-          .eq("token", tokenNormalized)
-          .maybeSingle();
-        
-        if (!minimalResult.error && minimalResult.data) {
-          // Record exists but we couldn't read all columns - schema mismatch
-          (debug.failures as string[]).push("share_link exists but schema mismatch - run migration");
-          debug.schema_mismatch = true;
-        }
-      } catch (err) {
-        // Ignore errors in fallback
-      }
-    }
-    
-    // Set debug info
-    debug.share_link_query_result = {
-      found: !!shareLinkNew,
-      error: errorNew ? {
-        message: errorNew.message,
-        code: errorNew.code,
-        details: errorNew.details,
-        hint: errorNew.hint
-      } : null,
-      columns_found: shareLinkNew ? Object.keys(shareLinkNew) : [],
-      token_searched: tokenNormalized
-    };
-    
-    if (!errorNew && shareLinkNew) {
-      // Check if it has the new schema fields
-      if (shareLinkNew.owner_user_id && shareLinkNew.is_active !== undefined) {
-        // New schema - check is_active
-        if (shareLinkNew.is_active) {
-          shareLink = shareLinkNew;
-          debug.schema_detected = "new";
-        } else {
-          (debug.failures as string[]).push("share_link found but is_active = false");
-          debug.share_link_inactive = true;
-        }
-      } else if (shareLinkNew.user_id) {
-        // Old schema - no is_active check needed
-        shareLink = shareLinkNew;
-        debug.schema_detected = "old";
-      } else {
-        (debug.failures as string[]).push("share_link found but missing owner_user_id/user_id");
-        debug.share_link_missing_owner = true;
-      }
-    } else {
-      shareLinkError = errorNew;
-      if (errorNew) {
-        debug.share_link_error_details = {
-          message: errorNew.message,
-          code: errorNew.code,
-          details: errorNew.details,
-          hint: errorNew.hint
-        };
-      }
-    }
+    const { data: shareLink, error: shareLinkError } = await supabase
+      .from("share_links")
+      .select("*")
+      .eq("token", tokenNormalized)
+      .eq("is_active", true)
+      .maybeSingle();
 
-    if (shareLink) {
+    if (!shareLinkError && shareLink) {
       // Found in new share_links table
       debug.token_found = true;
       debug.token_source = "share_links.token";
-      ownerId = shareLink.owner_user_id || shareLink.user_id;
-      debug.owner_user_id = ownerId;
+      debug.owner_user_id = shareLink.owner_user_id;
+      ownerId = shareLink.owner_user_id;
 
       // Convert share_links format to shareSettings format
-      // Handle both new schema (include_* booleans) and old schema (included_fields JSONB)
-      if (shareLink.include_stats !== undefined) {
-        // New schema with boolean columns
-        shareSettings = {
-          show_stats: shareLink.include_stats || false,
-          show_map: true, // Default to true for new system
-          show_countries: shareLink.include_countries || false,
-          show_photos: shareLink.include_memories || false, // include_memories includes photos
-          show_timeline: shareLink.include_memories || false, // include_memories includes timeline
-          show_family_members: true, // Default to true
-          show_achievements: true, // Default to true
-          show_wishlist: false, // Not in new system yet
-        };
-      } else if (shareLink.included_fields) {
-        // Old schema with JSONB array
-        const fields = Array.isArray(shareLink.included_fields) 
-          ? shareLink.included_fields 
-          : JSON.parse(shareLink.included_fields || '[]');
-        shareSettings = {
-          show_stats: fields.includes('stats'),
-          show_map: true,
-          show_countries: fields.includes('countries'),
-          show_photos: fields.includes('memories'),
-          show_timeline: fields.includes('memories'),
-          show_family_members: true,
-          show_achievements: true,
-          show_wishlist: false,
-        };
-      } else {
-        // Default to showing everything if no settings found
-        shareSettings = {
-          show_stats: true,
-          show_map: true,
-          show_countries: true,
-          show_photos: true,
-          show_timeline: true,
-          show_family_members: true,
-          show_achievements: true,
-          show_wishlist: false,
-        };
-      }
-    } else if (shareLinkError) {
-      // Log the error but continue to try old system
-      (debug.failures as string[]).push(`share_links lookup error: ${shareLinkError.message}`);
-      debug.share_link_error = shareLinkError;
-    }
-    
-    // Step 2: Fall back to old share_profiles table if share_links didn't work
-    if (!ownerId) {
+      shareSettings = {
+        show_stats: shareLink.include_stats,
+        show_map: true, // Default to true for new system
+        show_countries: shareLink.include_countries,
+        show_photos: shareLink.include_memories, // include_memories includes photos
+        show_timeline: shareLink.include_memories, // include_memories includes timeline
+        show_family_members: true, // Default to true
+        show_achievements: true, // Default to true
+        show_wishlist: false, // Not in new system yet
+      };
+    } else {
+      // Step 2: Fall back to old share_profiles table
       (debug.query_steps as string[]).push("lookup_share_profile");
       const { data: oldShareProfile, error: shareError } = await supabase
         .from("share_profiles")
@@ -291,12 +147,6 @@ Deno.serve(async (req) => {
 
       if (shareError || !oldShareProfile) {
         (debug.failures as string[]).push("share_link and share_profile not found");
-        debug.share_profile_error = shareError ? {
-          message: shareError.message,
-          code: shareError.code,
-          details: shareError.details
-        } : null;
-        debug.share_profile_found = !!oldShareProfile;
         return new Response(
           JSON.stringify({
             ok: false,
