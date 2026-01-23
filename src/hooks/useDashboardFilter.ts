@@ -65,11 +65,13 @@ export const useDashboardFilter = (familyMembers: FamilyMember[]): UseDashboardF
     
     const selectedName = selectedMember.name;
     
-    // Filter countries to only include visits by selected member
-    return countries.map(country => ({
-      ...country,
-      visitedBy: country.visitedBy.filter(name => name === selectedName)
-    }));
+    // Filter countries to only include countries where the selected member has visited
+    return countries
+      .filter(country => country.visitedBy.includes(selectedName))
+      .map(country => ({
+        ...country,
+        visitedBy: country.visitedBy.filter(name => name === selectedName)
+      }));
   }, [selectedMemberId, familyMembers]);
 
   // Calculate continents from filtered countries

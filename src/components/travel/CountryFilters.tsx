@@ -1,7 +1,8 @@
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Filter, X } from 'lucide-react';
+import { Filter, X, Users } from 'lucide-react';
+import { FamilyMember } from '@/hooks/useFamilyData';
 
 interface CountryFiltersProps {
   continents: string[];
@@ -11,6 +12,9 @@ interface CountryFiltersProps {
   onContinentChange: (value: string) => void;
   onYearChange: (value: string) => void;
   onClear: () => void;
+  familyMembers?: FamilyMember[];
+  selectedMemberId?: string | null;
+  onMemberChange?: (memberId: string | null) => void;
 }
 
 const CountryFilters = ({
@@ -21,8 +25,17 @@ const CountryFilters = ({
   onContinentChange,
   onYearChange,
   onClear,
+  familyMembers,
+  selectedMemberId,
+  onMemberChange,
 }: CountryFiltersProps) => {
-  const hasFilters = selectedContinent !== 'all' || selectedYear !== 'all';
+  const hasFilters = selectedContinent !== 'all' || selectedYear !== 'all' || (selectedMemberId !== null && selectedMemberId !== undefined);
+
+  const handleMemberChange = (value: string) => {
+    if (onMemberChange) {
+      onMemberChange(value === 'all' ? null : value);
+    }
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-3 p-3 bg-muted/50 rounded-lg border border-border">
@@ -30,6 +43,32 @@ const CountryFilters = ({
         <Filter className="h-4 w-4" />
         <span className="hidden sm:inline">Filters:</span>
       </div>
+
+      {familyMembers && familyMembers.length > 1 && onMemberChange && (
+        <Select
+          value={selectedMemberId || 'all'}
+          onValueChange={handleMemberChange}
+        >
+          <SelectTrigger className="w-auto min-w-[140px] h-8 text-sm">
+            <Users className="h-3.5 w-3.5 text-muted-foreground mr-2" />
+            <SelectValue placeholder="All Members" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Members</SelectItem>
+            {familyMembers.map((member) => (
+              <SelectItem key={member.id} value={member.id}>
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: member.color }}
+                  />
+                  <span>{member.name}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       <Select value={selectedContinent} onValueChange={onContinentChange}>
         <SelectTrigger className="w-[140px] h-8 text-sm">

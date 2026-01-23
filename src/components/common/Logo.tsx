@@ -165,7 +165,7 @@ export const Logo = ({
   if (variant === "text") {
     return (
       <span className={cn("font-bold", textSize, className)}>
-        Travel Tracker
+        Family Travel Tracker
       </span>
     );
   }
@@ -175,7 +175,7 @@ export const Logo = ({
       <LogoIcon />
       {showText && (
         <span className={cn("font-bold text-foreground", textSize)}>
-          Travel Tracker
+          Family Travel Tracker
         </span>
       )}
     </div>

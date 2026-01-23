@@ -8,21 +8,24 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import CountryDialog from "./CountryDialog";
 import CountryVisitDetailsDialog from "./CountryVisitDetailsDialog";
-import { Country } from "@/hooks/useFamilyData";
+import { Country, FamilyMember } from "@/hooks/useFamilyData";
 import { useVisitDetails } from "@/hooks/useVisitDetails";
 import { getAllCountries, getRegionCode } from "@/lib/countriesData";
 import { cn } from "@/lib/utils";
 import CountryFlag from "./common/CountryFlag";
 import CountryFilters from "./travel/CountryFilters";
 import DeleteConfirmDialog from "./common/DeleteConfirmDialog";
+import { format, parseISO } from "date-fns";
 
 interface CountryTrackerProps {
   countries: Country[];
-  familyMembers: Array<{ id: string; name: string }>;
+  familyMembers: FamilyMember[];
   onUpdate: () => void;
+  selectedMemberId?: string | null;
+  onMemberChange?: (memberId: string | null) => void;
 }
 
-const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerProps) => {
+const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, onMemberChange }: CountryTrackerProps) => {
   const { toast } = useToast();
   const { visitDetails, getCountrySummary, refetch: refetchVisitDetails } = useVisitDetails();
   const allCountriesData = getAllCountries();
@@ -35,6 +38,7 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
     countryName: ''
   });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [visitDetailsDialogOpen, setVisitDetailsDialogOpen] = useState<Record<string, boolean>>({});
 
   // Get unique continents and years from countries
   const { continents, years } = useMemo(() => {
@@ -86,6 +90,9 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
   const clearFilters = () => {
     setSelectedContinent('all');
     setSelectedYear('all');
+    if (onMemberChange) {
+      onMemberChange(null);
+    }
   };
 
   const toggleCountry = (countryId: string) => {
@@ -154,9 +161,9 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
         .eq("id", deleteDialog.countryId);
 
       if (error) {
-        toast({ title: "Error deleting country", variant: "destructive" });
+        toast({ title: "Error removing country", variant: "destructive" });
       } else {
-        toast({ title: `${deleteDialog.countryName} deleted successfully` });
+        toast({ title: `${deleteDialog.countryName} removed successfully` });
         onUpdate();
       }
     } finally {
@@ -189,6 +196,9 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
               onContinentChange={setSelectedContinent}
               onYearChange={setSelectedYear}
               onClear={clearFilters}
+              familyMembers={familyMembers}
+              selectedMemberId={selectedMemberId}
+              onMemberChange={onMemberChange}
             />
             {(selectedContinent !== 'all' || selectedYear !== 'all') && (
               <p className="text-sm text-muted-foreground mt-2">
@@ -283,6 +293,74 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
                   
                   <CollapsibleContent>
                     <div className="border-t p-4 space-y-4 bg-muted/20">
+                      {/* Logged Trips Section */}
+                      {(() => {
+                        const countryTrips = visitDetails
+                          .filter(v => v.country_id === country.id)
+                          .sort((a, b) => {
+                            // Sort by visit_date (most recent first), then by approximate_year
+                            if (a.visit_date && b.visit_date) {
+                              return new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime();
+                            }
+                            if (a.visit_date) return -1;
+                            if (b.visit_date) return 1;
+                            if (a.approximate_year && b.approximate_year) {
+                              return b.approximate_year - a.approximate_year;
+                            }
+                            return 0;
+                          });
+
+                        return countryTrips.length > 0 ? (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">
+                              Logged trips ({countryTrips.length}):
+                            </p>
+                            <div className="max-h-40 overflow-y-auto pr-1 space-y-1">
+                              {countryTrips.map((trip) => {
+                                let tripDisplay = "";
+                                if (trip.trip_name) {
+                                  tripDisplay = trip.trip_name;
+                                } else if (trip.visit_date) {
+                                  const startDate = format(parseISO(trip.visit_date), "MMM d, yyyy");
+                                  if (trip.end_date) {
+                                    const endDate = format(parseISO(trip.end_date), "MMM d, yyyy");
+                                    tripDisplay = `${startDate} - ${endDate}`;
+                                  } else {
+                                    tripDisplay = startDate;
+                                  }
+                                } else if (trip.approximate_year) {
+                                  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                                  const monthName = trip.approximate_month ? months[trip.approximate_month - 1] : "";
+                                  tripDisplay = [monthName, trip.approximate_year].filter(Boolean).join(" ") || `${trip.approximate_year}`;
+                                } else {
+                                  tripDisplay = "Date unknown";
+                                }
+                                
+                                const daysText = trip.number_of_days ? ` • ${trip.number_of_days} day${trip.number_of_days !== 1 ? "s" : ""}` : "";
+                                
+                                return (
+                                  <Button
+                                    key={trip.id}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full justify-start text-xs h-auto py-1.5 px-2 hover:bg-muted"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setVisitDetailsDialogOpen(prev => ({ ...prev, [country.id]: true }));
+                                    }}
+                                  >
+                                    <Calendar className="w-3 h-3 text-muted-foreground mr-2 flex-shrink-0" />
+                                    <span className="text-foreground text-left">
+                                      {tripDisplay}{daysText}
+                                    </span>
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+
                       {summary.cities.length > 0 && (
                         <div>
                           <p className="text-xs font-medium text-muted-foreground mb-2">
@@ -331,6 +409,10 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
                           countryCode={countryCode}
                           onUpdate={handleUpdate}
                           buttonLabel="View / Add Trips"
+                          open={visitDetailsDialogOpen[country.id]}
+                          onOpenChange={(open) => {
+                            setVisitDetailsDialogOpen(prev => ({ ...prev, [country.id]: open }));
+                          }}
                         />
                         <Button
                           variant="outline"
@@ -342,7 +424,7 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
                           className="text-destructive hover:text-destructive"
                         >
                           <Trash2 className="w-4 h-4 mr-1" />
-                          Delete
+                          Remove Country
                         </Button>
                       </div>
                     </div>
@@ -357,8 +439,8 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
           open={deleteDialog.open}
           onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
           onConfirm={handleDeleteConfirm}
-          title="Delete Country"
-          description={`Are you sure you want to delete this country? This action cannot be undone.`}
+          title="Remove Country"
+          description={`Are you sure you want to remove this country from your list of places visited? This action cannot be undone.`}
           itemName={deleteDialog.countryName}
           loading={isDeleting}
         />

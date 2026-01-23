@@ -23,7 +23,6 @@ import TravelStreaks from "@/components/travel/TravelStreaks";
 import CountryComparison from "@/components/travel/CountryComparison";
 import EnhancedBucketList from "@/components/travel/EnhancedBucketList";
 import TravelMilestones from "@/components/travel/TravelMilestones";
-import DashboardMemberFilter from "@/components/travel/DashboardMemberFilter";
 import { Button } from "@/components/ui/button";
 import { Loader2, BarChart3, Globe2, Trophy, Map as MapIcon, Camera, Users, MapPin, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -301,18 +300,6 @@ const TravelHistory = () => {
 
         {/* Tab Content */}
         <div className="container mx-auto px-4 py-6">
-          {/* Family Member Filter - Only show if more than 1 member */}
-          {!loading && familyMembers.length > 1 && (
-            <div className="mb-6 flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">View stats for:</span>
-              <DashboardMemberFilter
-                familyMembers={familyMembers}
-                selectedMemberId={selectedMemberId}
-                onSelectMember={setSelectedMemberId}
-              />
-            </div>
-          )}
-
           {/* Show loading skeleton when data is loading */}
           {loading ? (
             <div className="space-y-6">
@@ -366,9 +353,11 @@ const TravelHistory = () => {
               {activeTab === 'countries' && (
                 <div className="space-y-8">
                   <CountryTracker 
-                    countries={countries.filter(c => c.visitedBy.length > 0)} 
+                    countries={filteredCountries.filter(c => c.visitedBy.length > 0)} 
                     familyMembers={familyMembers}
                     onUpdate={refetch}
+                    selectedMemberId={selectedMemberId}
+                    onMemberChange={setSelectedMemberId}
                   />
                   <CountryWishlist 
                     countries={countries}

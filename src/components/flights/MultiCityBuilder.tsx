@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { searchAirports, type Airport } from '@/lib/airportsData';
+import { getAllCountries } from '@/lib/countriesData';
 
 export interface FlightLeg {
   id: string;
@@ -82,9 +83,20 @@ const MultiCityBuilder = ({
     }
   };
 
+  // Helper to get country name from code
+  const getCountryName = (code: string): string => {
+    const allCountries = getAllCountries();
+    const country = allCountries.find(c => c.code === code);
+    return country?.name || code;
+  };
+
   const handleSelectAirport = (airport: Airport, legId: string, field: 'origin' | 'destination') => {
     handleLegChange(legId, field, airport.code);
-    handleLegChange(legId, `${field}Name` as keyof FlightLeg, `${airport.city}, ${airport.country}`);
+    const countryName = getCountryName(airport.country);
+    const location = airport.country === "US" && airport.state 
+      ? `${airport.city}, ${airport.state}, ${countryName}`
+      : `${airport.city}, ${countryName}`;
+    handleLegChange(legId, `${field}Name` as keyof FlightLeg, location);
     setSearchResults([]);
     setActiveInput(null);
     
@@ -95,7 +107,7 @@ const MultiCityBuilder = ({
         const nextLeg = legs[legIndex + 1];
         if (!nextLeg.origin) {
           handleLegChange(nextLeg.id, 'origin', airport.code);
-          handleLegChange(nextLeg.id, 'originName', `${airport.city}, ${airport.country}`);
+          handleLegChange(nextLeg.id, 'originName', location);
         }
       }
     }
@@ -209,17 +221,24 @@ const MultiCityBuilder = ({
                 />
                 {activeInput?.legId === leg.id && activeInput.field === 'origin' && searchResults.length > 0 && (
                   <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-auto">
-                    {searchResults.slice(0, 8).map(airport => (
-                      <button
-                        key={airport.code}
-                        className="w-full px-3 py-2 text-left hover:bg-muted text-sm"
-                        onMouseDown={() => handleSelectAirport(airport, leg.id, 'origin')}
-                      >
-                        <span className="font-medium">{airport.code}</span>
-                        <span className="text-muted-foreground"> - {airport.name}</span>
-                        <span className="text-xs text-muted-foreground block">{airport.city}, {airport.country}</span>
-                      </button>
-                    ))}
+                    {searchResults.slice(0, 8).map(airport => {
+                      const countryName = getCountryName(airport.country);
+                      return (
+                        <button
+                          key={airport.code}
+                          className="w-full px-3 py-2 text-left hover:bg-muted text-sm"
+                          onMouseDown={() => handleSelectAirport(airport, leg.id, 'origin')}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-medium">{airport.code}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {airport.city}{airport.country === "US" && airport.state ? `, ${airport.state}` : ""}, {countryName}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{airport.name}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -240,17 +259,24 @@ const MultiCityBuilder = ({
                 />
                 {activeInput?.legId === leg.id && activeInput.field === 'destination' && searchResults.length > 0 && (
                   <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-auto">
-                    {searchResults.slice(0, 8).map(airport => (
-                      <button
-                        key={airport.code}
-                        className="w-full px-3 py-2 text-left hover:bg-muted text-sm"
-                        onMouseDown={() => handleSelectAirport(airport, leg.id, 'destination')}
-                      >
-                        <span className="font-medium">{airport.code}</span>
-                        <span className="text-muted-foreground"> - {airport.name}</span>
-                        <span className="text-xs text-muted-foreground block">{airport.city}, {airport.country}</span>
-                      </button>
-                    ))}
+                    {searchResults.slice(0, 8).map(airport => {
+                      const countryName = getCountryName(airport.country);
+                      return (
+                        <button
+                          key={airport.code}
+                          className="w-full px-3 py-2 text-left hover:bg-muted text-sm"
+                          onMouseDown={() => handleSelectAirport(airport, leg.id, 'destination')}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-medium">{airport.code}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {airport.city}{airport.country === "US" && airport.state ? `, ${airport.state}` : ""}, {countryName}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{airport.name}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>

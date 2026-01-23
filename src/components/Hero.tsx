@@ -24,7 +24,7 @@ const Hero = ({ totalCountries, totalContinents, totalMembers }: HeroProps) => {
         </div>
         
         <h1 className="text-5xl md:text-7xl font-bold text-primary-foreground mb-6 animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-150">
-          Travel Tracker
+          Family Travel Tracker
         </h1>
         
         <p className="text-xl md:text-2xl text-primary-foreground/90 max-w-2xl mx-auto mb-8 animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-300">

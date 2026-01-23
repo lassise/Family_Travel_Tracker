@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { scoreFlights, categorizeFlights, type ScoredFlight, type FlightResult, type PassengerBreakdown } from "@/lib/flightScoring";
 import { searchAirports, MAJOR_US_AIRLINES, INTERNATIONAL_AIRLINES, AIRLINES, type Airport } from "@/lib/airportsData";
+import { getAllCountries } from "@/lib/countriesData";
 import { runFlightAvoidanceSelfTest } from "@/lib/flightAvoidanceSelfTest";
 
 const DEPARTURE_TIMES = [{
@@ -293,6 +294,13 @@ const Flights = () => {
     setActiveLegTab(tripType === "multicity" ? "segment-1" : "outbound");
     clearResults();
   }, [tripType, clearResults]);
+
+  // Helper to get country name from code
+  const getCountryName = (code: string): string => {
+    const allCountries = getAllCountries();
+    const country = allCountries.find(c => c.code === code);
+    return country?.name || code;
+  };
 
   const handleOriginSearch = (value: string) => {
     setOrigin(value.toUpperCase());
@@ -815,12 +823,23 @@ const Flights = () => {
                         <Input placeholder="City or airport" className="pl-10" value={origin} onChange={e => handleOriginSearch(e.target.value)} onFocus={() => origin.length >= 2 && setShowOriginResults(true)} onBlur={() => setTimeout(() => setShowOriginResults(false), 200)} />
                       </div>
                       {showOriginResults && originResults.length > 0 && <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-auto">
-                          {originResults.map(a => <button key={a.code} className="w-full px-3 py-2 text-left hover:bg-muted text-sm" onClick={() => {
-                            setOrigin(a.code);
-                            setShowOriginResults(false);
-                          }}>
-                              <span className="font-medium">{a.code}</span> - {a.city} ({a.name})
-                            </button>)}
+                          {originResults.map(a => {
+                            const countryName = getCountryName(a.country);
+                            return (
+                              <button key={a.code} className="w-full px-3 py-2 text-left hover:bg-muted text-sm" onClick={() => {
+                                setOrigin(a.code);
+                                setShowOriginResults(false);
+                              }}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{a.code}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {a.city}{a.country === "US" && a.state ? `, ${a.state}` : ""}, {countryName}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">{a.name}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>}
                     </div>
                     <div className="relative">
@@ -830,12 +849,23 @@ const Flights = () => {
                         <Input placeholder="City or airport" className="pl-10" value={destination} onChange={e => handleDestSearch(e.target.value)} onFocus={() => destination.length >= 2 && setShowDestResults(true)} onBlur={() => setTimeout(() => setShowDestResults(false), 200)} />
                       </div>
                       {showDestResults && destResults.length > 0 && <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-auto">
-                          {destResults.map(a => <button key={a.code} className="w-full px-3 py-2 text-left hover:bg-muted text-sm" onClick={() => {
-                            setDestination(a.code);
-                            setShowDestResults(false);
-                          }}>
-                              <span className="font-medium">{a.code}</span> - {a.city} ({a.name})
-                            </button>)}
+                          {destResults.map(a => {
+                            const countryName = getCountryName(a.country);
+                            return (
+                              <button key={a.code} className="w-full px-3 py-2 text-left hover:bg-muted text-sm" onClick={() => {
+                                setDestination(a.code);
+                                setShowDestResults(false);
+                              }}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{a.code}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {a.city}{a.country === "US" && a.state ? `, ${a.state}` : ""}, {countryName}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">{a.name}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>}
                     </div>
                   </div>}
