@@ -3,8 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Copy, Check, Loader2 } from 'lucide-react';
+import { Copy, Check, Loader2, AlertCircle, Bug } from 'lucide-react';
 import { toast } from 'sonner';
+import { diagnoseShareSystem, ShareDiagnostics } from '@/lib/share-tokens';
+import { useAuth } from '@/hooks/useAuth';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
 
 export interface ShareOption {
   id: string;
@@ -38,6 +42,7 @@ export function ShareDialog({
   existingShareUrl,
   onRevokeLink,
 }: ShareDialogProps) {
+  const { user } = useAuth();
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(
     new Set(options.filter(opt => opt.defaultChecked).map(opt => opt.id))
   );
@@ -45,6 +50,9 @@ export function ShareDialog({
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<ShareDiagnostics | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
 
   // Reset state when dialog opens/closes or existing URL changes
   useEffect(() => {
@@ -70,6 +78,31 @@ export function ShareDialog({
     }
   };
 
+  const handleDiagnose = async () => {
+    if (!user) {
+      toast.error('You must be logged in to run diagnostics');
+      return;
+    }
+
+    setIsDiagnosing(true);
+    try {
+      const diag = await diagnoseShareSystem(user.id);
+      setDiagnostics(diag);
+      setShowDiagnostics(true);
+      
+      if (diag.success) {
+        toast.success(`Diagnostics: Using ${diag.method} system`);
+      } else {
+        toast.error(`Diagnostics failed: ${diag.error}`);
+      }
+    } catch (error: any) {
+      console.error('Diagnostics error:', error);
+      toast.error(`Diagnostics error: ${error.message}`);
+    } finally {
+      setIsDiagnosing(false);
+    }
+  };
+
   const handleGenerateLink = async () => {
     if (selectedOptions.size === 0) {
       toast.error('Please select at least one option to share');
@@ -81,9 +114,17 @@ export function ShareDialog({
       const url = await onGenerateLink(Array.from(selectedOptions));
       setShareUrl(url);
       toast.success('Share link generated!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to generate share link:', error);
-      toast.error('Failed to generate share link. Please try again.');
+      const errorMessage = error?.message || 'Unknown error';
+      toast.error(`Failed to generate share link: ${errorMessage}`);
+      
+      // Auto-run diagnostics on error
+      if (user && !diagnostics) {
+        const diag = await diagnoseShareSystem(user.id);
+        setDiagnostics(diag);
+        setShowDiagnostics(true);
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -230,6 +271,98 @@ export function ShareDialog({
               )}
             </div>
           )}
+
+          {/* Diagnostics Section */}
+          <Collapsible open={showDiagnostics} onOpenChange={setShowDiagnostics}>
+            <div className="pt-4 border-t">
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-between text-xs"
+                  onClick={handleDiagnose}
+                  disabled={isDiagnosing || !user}
+                >
+                  <div className="flex items-center gap-2">
+                    <Bug className="h-3.5 w-3.5" />
+                    <span>Diagnostics</span>
+                  </div>
+                  {isDiagnosing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <span className="text-muted-foreground">Click to run</span>
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              
+              {diagnostics && (
+                <CollapsibleContent className="mt-2">
+                  <div className="p-3 rounded-lg bg-muted/50 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Status:</span>
+                      <span className={cn(
+                        diagnostics.success ? 'text-emerald-600' : 'text-destructive'
+                      )}>
+                        {diagnostics.success ? '✓ Working' : '✗ Failed'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Method:</span>
+                      <span className="text-muted-foreground">{diagnostics.method}</span>
+                    </div>
+                    {diagnostics.tableExists !== undefined && (
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">share_links table:</span>
+                        <span className={cn(
+                          diagnostics.tableExists ? 'text-emerald-600' : 'text-orange-600'
+                        )}>
+                          {diagnostics.tableExists ? 'Exists' : 'Missing'}
+                        </span>
+                      </div>
+                    )}
+                    {diagnostics.token && (
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Token:</span>
+                        <span className="text-muted-foreground font-mono text-[10px]">
+                          {diagnostics.token.substring(0, 8)}...
+                        </span>
+                      </div>
+                    )}
+                    {diagnostics.url && (
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">URL:</span>
+                        <span className="text-muted-foreground font-mono text-[10px] truncate ml-2">
+                          {diagnostics.url}
+                        </span>
+                      </div>
+                    )}
+                    {diagnostics.error && (
+                      <div className="pt-2 border-t">
+                        <div className="flex items-start gap-2 text-destructive">
+                          <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <div className="font-medium">Error:</div>
+                            <div className="text-[10px] break-all">{diagnostics.error}</div>
+                            {diagnostics.errorDetails && (
+                              <details className="mt-1">
+                                <summary className="cursor-pointer text-[10px]">Details</summary>
+                                <pre className="text-[10px] mt-1 overflow-auto max-h-32">
+                                  {JSON.stringify(diagnostics.errorDetails, null, 2)}
+                                </pre>
+                              </details>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="text-[10px] text-muted-foreground pt-1">
+                      {diagnostics.timestamp}
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              )}
+            </div>
+          </Collapsible>
         </div>
       </DialogContent>
     </Dialog>

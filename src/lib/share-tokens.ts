@@ -2,6 +2,18 @@ import { supabase } from '@/integrations/supabase/client';
 
 export type ShareType = 'dashboard' | 'memory' | 'wishlist' | 'trip' | 'highlights';
 
+// Diagnostic information interface
+export interface ShareDiagnostics {
+  success: boolean;
+  method: 'share_links' | 'share_profiles' | 'error';
+  error?: string;
+  errorDetails?: any;
+  tableExists?: boolean;
+  token?: string;
+  url?: string;
+  timestamp: string;
+}
+
 export interface ShareTokenOptions {
   userId: string;
   shareType: ShareType;
@@ -26,10 +38,11 @@ export interface ShareLinkData {
  * Generate a secure random token (32 characters, URL-safe)
  */
 function generateToken(): string {
-  // Use crypto.randomUUID if available, otherwise fallback to random string
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    // Remove hyphens and take first 32 chars
-    return crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+  // Use crypto.getRandomValues for better randomness (like the old system)
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    return Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
   }
   // Fallback: generate random string
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -41,7 +54,99 @@ function generateToken(): string {
 }
 
 /**
+ * Check if share_links table exists by attempting a query
+ */
+async function checkShareLinksTableExists(): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('share_links')
+      .select('id')
+      .limit(1);
+    
+    // If error is about table not existing, return false
+    if (error && (error.message.includes('does not exist') || error.code === '42P01')) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Generate share token using old share_profiles system (fallback)
+ */
+async function generateShareTokenLegacy(userId: string, shareType: ShareType): Promise<string> {
+  // For dashboard, use the old share_profiles system
+  if (shareType === 'dashboard') {
+    // Fetch or create share profile
+    let { data: profile, error } = await supabase
+      .from("share_profiles")
+      .select("id, dashboard_share_token, is_public")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error && !error.message.includes('does not exist')) {
+      throw new Error(`Failed to fetch share profile: ${error.message}`);
+    }
+
+    // Create if doesn't exist
+    if (!profile) {
+      const newToken = generateToken();
+      const { data: newProfile, error: createError } = await supabase
+        .from("share_profiles")
+        .insert({
+          user_id: userId,
+          is_public: true,
+          show_stats: true,
+          show_map: true,
+          show_countries: true,
+          show_photos: true,
+          dashboard_share_token: newToken,
+        })
+        .select("dashboard_share_token")
+        .single();
+
+      if (createError) {
+        throw new Error(`Failed to create share profile: ${createError.message}`);
+      }
+      profile = newProfile;
+    }
+
+    // Generate token if missing
+    if (!profile.dashboard_share_token) {
+      const newToken = generateToken();
+      const { error: updateError } = await supabase
+        .from("share_profiles")
+        .update({ 
+          dashboard_share_token: newToken,
+          is_public: true 
+        })
+        .eq("id", profile.id);
+
+      if (updateError) {
+        throw new Error(`Failed to update share profile: ${updateError.message}`);
+      }
+      profile.dashboard_share_token = newToken;
+    }
+
+    // Ensure it's public
+    if (!profile.is_public) {
+      await supabase
+        .from("share_profiles")
+        .update({ is_public: true })
+        .eq("id", profile.id);
+    }
+
+    return `${window.location.origin}/dashboard/${profile.dashboard_share_token}`;
+  }
+
+  throw new Error(`Legacy system not supported for share type: ${shareType}`);
+}
+
+/**
  * Generate a share token and store it in the database
+ * Falls back to legacy share_profiles system if share_links table doesn't exist
  */
 export async function generateShareToken(options: ShareTokenOptions): Promise<string> {
   const { userId, shareType, itemId, includedFields, expiresAt } = options;
@@ -49,44 +154,190 @@ export async function generateShareToken(options: ShareTokenOptions): Promise<st
   // Generate secure random token
   const token = generateToken().toLowerCase();
 
-  // Store in database
-  const { data, error } = await supabase
-    .from('share_links')
-    .insert({
-      token: token,
-      user_id: userId,
-      share_type: shareType,
-      item_id: itemId || null,
-      included_fields: includedFields,
-      created_at: new Date().toISOString(),
-      expires_at: expiresAt || null,
-      view_count: 0,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Failed to generate share token:', error);
-    throw new Error(`Failed to generate share token: ${error.message}`);
-  }
-
-  // Return full URL based on share type
-  const baseUrl = window.location.origin;
+  // Try new share_links table first
+  const tableExists = await checkShareLinksTableExists();
   
-  switch (shareType) {
-    case 'dashboard':
-      return `${baseUrl}/share/dashboard/${token}`;
-    case 'memory':
-      return `${baseUrl}/share/memory/${token}`;
-    case 'wishlist':
-      return `${baseUrl}/share/wishlist/${token}`;
-    case 'trip':
-      return `${baseUrl}/share/trip/${token}`;
-    case 'highlights':
-      return `${baseUrl}/highlights/${token}`;
-    default:
-      return `${baseUrl}/share/${token}`;
+  if (tableExists) {
+    try {
+      // First, try with expires_at (if column exists)
+      let insertData: any = {
+        token: token,
+        user_id: userId,
+        share_type: shareType,
+        item_id: itemId || null,
+        included_fields: includedFields,
+        created_at: new Date().toISOString(),
+        view_count: 0,
+      };
+
+      // Only include expires_at if provided (column might not exist)
+      if (expiresAt !== undefined) {
+        insertData.expires_at = expiresAt;
+      }
+
+      let { data, error } = await supabase
+        .from('share_links')
+        .insert(insertData)
+        .select()
+        .single();
+
+      // If error is about missing column, try without expires_at
+      if (error && (error.message.includes('expires_at') || error.message.includes('column') || error.code === '42703')) {
+        console.warn('expires_at column not found, retrying without it:', error.message);
+        // Remove expires_at and try again
+        delete insertData.expires_at;
+        const retryResult = await supabase
+          .from('share_links')
+          .insert(insertData)
+          .select()
+          .single();
+        
+        if (retryResult.error) {
+          console.warn('share_links insert failed after retry, trying legacy system:', retryResult.error);
+          // Fall through to legacy system
+        } else {
+          data = retryResult.data;
+          error = null;
+        }
+      }
+
+      if (!error && data) {
+        // Success with new system
+        const baseUrl = window.location.origin;
+        switch (shareType) {
+          case 'dashboard':
+            return `${baseUrl}/share/dashboard/${token}`;
+          case 'memory':
+            return `${baseUrl}/share/memory/${token}`;
+          case 'wishlist':
+            return `${baseUrl}/share/wishlist/${token}`;
+          case 'trip':
+            return `${baseUrl}/share/trip/${token}`;
+          case 'highlights':
+            return `${baseUrl}/highlights/${token}`;
+          default:
+            return `${baseUrl}/share/${token}`;
+        }
+      } else if (error) {
+        console.warn('share_links insert failed, trying legacy system:', error);
+        // Fall through to legacy system
+      }
+    } catch (err) {
+      console.warn('share_links insert error, trying legacy system:', err);
+      // Fall through to legacy system
+    }
   }
+
+  // Fallback to legacy system for dashboard
+  if (shareType === 'dashboard') {
+    console.log('Using legacy share_profiles system for dashboard sharing');
+    return await generateShareTokenLegacy(userId, shareType);
+  }
+
+  // For other types, throw error if new system fails
+  throw new Error(`Failed to generate share token: share_links table may not exist. Please run database migrations.`);
+}
+
+/**
+ * Diagnostic function to check share system status
+ */
+export async function diagnoseShareSystem(userId: string): Promise<ShareDiagnostics> {
+  const diagnostics: ShareDiagnostics = {
+    success: false,
+    method: 'error',
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    // Check if share_links table exists
+    const shareLinksExists = await checkShareLinksTableExists();
+    diagnostics.tableExists = shareLinksExists;
+
+    if (shareLinksExists) {
+      // Test insert/delete (without expires_at to avoid schema issues)
+      const testToken = generateToken().toLowerCase();
+      const { data, error } = await supabase
+        .from('share_links')
+        .insert({
+          token: testToken,
+          user_id: userId,
+          share_type: 'dashboard',
+          included_fields: ['test'],
+          view_count: 0,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        // If it's a column error, try without expires_at
+        if (error.message.includes('expires_at') || error.message.includes('column') || error.code === '42703') {
+          const retryResult = await supabase
+            .from('share_links')
+            .insert({
+              token: testToken,
+              user_id: userId,
+              share_type: 'dashboard',
+              included_fields: ['test'],
+              view_count: 0,
+            })
+            .select()
+            .single();
+
+          if (retryResult.error) {
+            diagnostics.error = retryResult.error.message;
+            diagnostics.errorDetails = retryResult.error;
+          } else {
+            // Clean up test record
+            await supabase
+              .from('share_links')
+              .delete()
+              .eq('id', retryResult.data.id);
+
+            diagnostics.success = true;
+            diagnostics.method = 'share_links';
+            diagnostics.token = testToken;
+          }
+        } else {
+          diagnostics.error = error.message;
+          diagnostics.errorDetails = error;
+        }
+      } else {
+        // Clean up test record
+        await supabase
+          .from('share_links')
+          .delete()
+          .eq('id', data.id);
+
+        diagnostics.success = true;
+        diagnostics.method = 'share_links';
+        diagnostics.token = testToken;
+      }
+    } else {
+      // Check legacy system
+      const { data, error } = await supabase
+        .from("share_profiles")
+        .select("dashboard_share_token")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (error && !error.message.includes('does not exist')) {
+        diagnostics.error = `share_profiles error: ${error.message}`;
+        diagnostics.errorDetails = error;
+      } else {
+        diagnostics.success = true;
+        diagnostics.method = 'share_profiles';
+        if (data?.dashboard_share_token) {
+          diagnostics.token = data.dashboard_share_token;
+          diagnostics.url = `${window.location.origin}/dashboard/${data.dashboard_share_token}`;
+        }
+      }
+    }
+  } catch (err: any) {
+    diagnostics.error = err.message || 'Unknown error';
+    diagnostics.errorDetails = err;
+  }
+
+  return diagnostics;
 }
 
 /**
