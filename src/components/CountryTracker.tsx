@@ -49,7 +49,14 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
     
     visitDetails.forEach(v => {
       if (v.visit_date) {
-        yearSet.add(new Date(v.visit_date).getFullYear());
+        try {
+          const date = new Date(v.visit_date);
+          if (!isNaN(date.getTime())) {
+            yearSet.add(date.getFullYear());
+          }
+        } catch {
+          // Ignore invalid dates
+        }
       } else if (v.approximate_year) {
         yearSet.add(v.approximate_year);
       }
@@ -65,6 +72,14 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
   const filteredCountries = useMemo(() => {
     let result = countries;
     
+    // Filter by selected member
+    if (selectedMemberId) {
+      const selectedMember = familyMembers.find(m => m.id === selectedMemberId);
+      if (selectedMember) {
+        result = result.filter(c => c.visitedBy.includes(selectedMember.name));
+      }
+    }
+    
     if (selectedContinent !== 'all') {
       result = result.filter(c => c.continent === selectedContinent);
     }
@@ -75,7 +90,12 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
         visitDetails
           .filter(v => {
             if (v.visit_date) {
-              return new Date(v.visit_date).getFullYear() === year;
+              try {
+                const date = new Date(v.visit_date);
+                return !isNaN(date.getTime()) && date.getFullYear() === year;
+              } catch {
+                return false;
+              }
             }
             return v.approximate_year === year;
           })
@@ -85,7 +105,7 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
     }
     
     return result;
-  }, [countries, selectedContinent, selectedYear, visitDetails]);
+  }, [countries, selectedContinent, selectedYear, selectedMemberId, familyMembers, visitDetails]);
 
   const clearFilters = () => {
     setSelectedContinent('all');
@@ -131,6 +151,7 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
 
       if (error) {
         toast({ title: "Error updating visit", variant: "destructive" });
+        return;
       }
     } else {
       const { data: { user } } = await supabase.auth.getUser();
@@ -144,8 +165,12 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
 
       if (error) {
         toast({ title: "Error updating visit", variant: "destructive" });
+        return;
       }
     }
+    
+    // Update the UI after successful toggle
+    handleUpdate();
   };
 
   const handleDeleteClick = (countryId: string, countryName: string) => {
@@ -200,7 +225,7 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
               selectedMemberId={selectedMemberId}
               onMemberChange={onMemberChange}
             />
-            {(selectedContinent !== 'all' || selectedYear !== 'all') && (
+            {(selectedContinent !== 'all' || selectedYear !== 'all' || selectedMemberId) && (
               <p className="text-sm text-muted-foreground mt-2">
                 Showing {filteredCountries.length} of {countries.length} countries
               </p>
@@ -300,10 +325,32 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
                           .sort((a, b) => {
                             // Sort by visit_date (most recent first), then by approximate_year
                             if (a.visit_date && b.visit_date) {
-                              return new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime();
+                              try {
+                                const dateA = new Date(a.visit_date);
+                                const dateB = new Date(b.visit_date);
+                                if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
+                                  return dateB.getTime() - dateA.getTime();
+                                }
+                              } catch {
+                                // Fall through to approximate_year comparison
+                              }
                             }
-                            if (a.visit_date) return -1;
-                            if (b.visit_date) return 1;
+                            if (a.visit_date) {
+                              try {
+                                const dateA = new Date(a.visit_date);
+                                if (!isNaN(dateA.getTime())) return -1;
+                              } catch {
+                                // Fall through
+                              }
+                            }
+                            if (b.visit_date) {
+                              try {
+                                const dateB = new Date(b.visit_date);
+                                if (!isNaN(dateB.getTime())) return 1;
+                              } catch {
+                                // Fall through
+                              }
+                            }
                             if (a.approximate_year && b.approximate_year) {
                               return b.approximate_year - a.approximate_year;
                             }
@@ -321,16 +368,27 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
                                 if (trip.trip_name) {
                                   tripDisplay = trip.trip_name;
                                 } else if (trip.visit_date) {
-                                  const startDate = format(parseISO(trip.visit_date), "MMM d, yyyy");
-                                  if (trip.end_date) {
-                                    const endDate = format(parseISO(trip.end_date), "MMM d, yyyy");
-                                    tripDisplay = `${startDate} - ${endDate}`;
-                                  } else {
-                                    tripDisplay = startDate;
+                                  try {
+                                    const startDate = format(parseISO(trip.visit_date), "MMM d, yyyy");
+                                    if (trip.end_date) {
+                                      try {
+                                        const endDate = format(parseISO(trip.end_date), "MMM d, yyyy");
+                                        tripDisplay = `${startDate} - ${endDate}`;
+                                      } catch {
+                                        tripDisplay = startDate;
+                                      }
+                                    } else {
+                                      tripDisplay = startDate;
+                                    }
+                                  } catch {
+                                    // Fallback if date parsing fails
+                                    tripDisplay = trip.visit_date || "Date unknown";
                                   }
                                 } else if (trip.approximate_year) {
                                   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                                  const monthName = trip.approximate_month ? months[trip.approximate_month - 1] : "";
+                                  const monthName = trip.approximate_month && trip.approximate_month >= 1 && trip.approximate_month <= 12
+                                    ? months[trip.approximate_month - 1]
+                                    : "";
                                   tripDisplay = [monthName, trip.approximate_year].filter(Boolean).join(" ") || `${trip.approximate_year}`;
                                 } else {
                                   tripDisplay = "Date unknown";

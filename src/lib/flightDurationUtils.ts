@@ -41,6 +41,11 @@ export function parseDateTimeInTimezone(
       minutes = parseInt(timeMatch[2]);
       const isPM = timeMatch[3]?.toUpperCase() === 'PM';
       
+      // Validate parsed values
+      if (isNaN(hours) || isNaN(minutes) || hours < 1 || hours > 12 || minutes < 0 || minutes > 59) {
+        return null;
+      }
+      
       if (isPM && hours !== 12) hours += 12;
       if (!isPM && hours === 12) hours = 0;
     } else {
@@ -49,6 +54,11 @@ export function parseDateTimeInTimezone(
       if (time24Match) {
         hours = parseInt(time24Match[1]);
         minutes = parseInt(time24Match[2]);
+        
+        // Validate parsed values
+        if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+          return null;
+        }
       } else {
         return null;
       }
@@ -60,15 +70,20 @@ export function parseDateTimeInTimezone(
       : baseDate;
     
     // Parse the date components
-    const [year, month, day] = dateStr.split('-').map(Number);
+    const dateParts = dateStr.split('-');
+    if (dateParts.length !== 3) {
+      return null; // Invalid date format
+    }
     
-    // Use a more direct approach: create a date string and use Intl to convert
-    // We'll create the date in the timezone, then convert to UTC
-    const dateTimeLocal = `${dateStr}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+    const [year, month, day] = dateParts.map(Number);
     
-    // Create a date assuming it's in the timezone
-    // We need to find what UTC time corresponds to this local time in the timezone
-    // Use Intl.DateTimeFormat to help us convert
+    // Validate parsed date components
+    if (isNaN(year) || isNaN(month) || isNaN(day) || 
+        year < 2000 || year > 2100 || 
+        month < 1 || month > 12 || 
+        day < 1 || day > 31) {
+      return null; // Invalid date values
+    }
     
     // Method: Create a date in UTC, then check what it shows in the timezone
     // Adjust until it matches
@@ -87,6 +102,7 @@ export function parseDateTimeInTimezone(
     });
     
     // Iterate to find the correct UTC time (usually converges in 1-2 iterations)
+    let lastDiff = Infinity;
     for (let i = 0; i < 5; i++) {
       const parts = formatter.formatToParts(guessUTC);
       const tzYear = parseInt(parts.find(p => p.type === 'year')?.value || '0');
@@ -107,11 +123,17 @@ export function parseDateTimeInTimezone(
       const desiredTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
       const diffMs = desiredTime.getTime() - tzTime.getTime();
       
+      // Safety check: if we're not converging or diverging, break
+      if (Math.abs(diffMs) < 1000) break; // Less than 1 second difference - close enough
+      if (Math.abs(diffMs) >= Math.abs(lastDiff)) {
+        // Not converging or diverging - break to avoid infinite loop
+        break;
+      }
+      
+      lastDiff = diffMs;
+      
       // Adjust the guess by the difference
       guessUTC = new Date(guessUTC.getTime() + diffMs);
-      
-      // Safety check: if we're not converging, break
-      if (Math.abs(diffMs) < 1000) break; // Less than 1 second difference
     }
     
     // Return the best guess we have
@@ -204,7 +226,22 @@ export function calculateTotalDuration(
     return null;
   }
   
-  // Check if we have timezone data for all airports
+  // PRIORITY 1: If we have segment durations, prefer sum method
+  // This gives the actual flight time (time in air + layover time), which is what users expect
+  // The sum method is more accurate for flights with layovers because it represents actual time spent
+  const hasAnySegmentDurations = segments.some(seg => seg.duration !== undefined && seg.duration !== null);
+  
+  if (hasAnySegmentDurations) {
+    const sumResult = calculateTotalDurationBySum(segments, layovers);
+    // Use sum if it's reasonable (positive and not too large)
+    // This is preferred because it represents actual flight time, not elapsed wall-clock time
+    if (sumResult > 0 && sumResult <= 2880) {
+      return sumResult;
+    }
+  }
+  
+  // PRIORITY 2: Use timezone-aware calculation if we have timezone data
+  // This gives elapsed wall-clock time, which is useful when we don't have segment durations
   const hasTimezones = hasAllTimezones(segments);
   
   let firstDepartureUTC: Date | null = null;
@@ -231,32 +268,35 @@ export function calculateTotalDuration(
       : null;
     
     if (lastArrTimezone) {
-      // For arrival, we may need to handle day changes
-      // Start with the departure date and adjust if needed
+      // For arrival, we need to determine which day it occurs on
+      // Start with the departure date and adjust based on actual times
       let arrivalDate = departureDate;
       
-      // Check for overnight indicators
+      // Check for explicit overnight indicators first
       const hasOvernight = segments.some(seg => (seg as any).overnight) ||
                           (layovers && layovers.some(lay => lay.overnight));
       
       if (hasOvernight) {
-        // Try next day
+        // Try next day if overnight indicator is present
         const depDate = new Date(departureDate + 'T00:00:00');
         depDate.setDate(depDate.getDate() + 1);
         arrivalDate = depDate.toISOString().split('T')[0];
       }
       
+      // Parse arrival time
       finalArrivalUTC = parseDateTimeInTimezone(
         lastSegment.arrivalTime,
         arrivalDate,
         lastArrTimezone
       );
       
-      // If arrival is before departure in UTC, it's likely next day
+      // If we have both times, check if arrival is before departure (invalid)
+      // This indicates arrival is on a later day
       if (finalArrivalUTC && firstDepartureUTC && finalArrivalUTC.getTime() < firstDepartureUTC.getTime()) {
-        const nextDay = new Date(arrivalDate + 'T00:00:00');
-        nextDay.setDate(nextDay.getDate() + 1);
-        const nextDayStr = nextDay.toISOString().split('T')[0];
+        // Arrival is before departure - must be next day (or later)
+        const depDate = new Date(arrivalDate + 'T00:00:00');
+        depDate.setDate(depDate.getDate() + 1);
+        const nextDayStr = depDate.toISOString().split('T')[0];
         finalArrivalUTC = parseDateTimeInTimezone(
           lastSegment.arrivalTime,
           nextDayStr,
@@ -285,13 +325,17 @@ export function calculateTotalDuration(
     const durationMs = finalArrival.getTime() - firstDeparture.getTime();
     const durationMinutes = Math.round(durationMs / (1000 * 60));
     
-    // If we don't have timezones, fall back to sum method for cross-timezone flights
-    // We can detect this by checking if airports are in different countries
+    // If we don't have timezones, check if this might be an international flight
+    // by checking if airports are different (simple heuristic)
+    // Note: We can't reliably detect country from airport codes, so we use
+    // a simpler check: if airports are different and we don't have timezone data,
+    // prefer sum method to avoid timezone offset errors
     if (!hasTimezones && segments.length > 0) {
-      const firstCountry = segments[0].departureAirport?.substring(0, 2);
-      const lastCountry = lastSegment.arrivalAirport?.substring(0, 2);
-      if (firstCountry && lastCountry && firstCountry !== lastCountry) {
-        // International flight without timezone data - use sum method
+      const firstAirport = segments[0].departureAirport;
+      const lastAirport = lastSegment.arrivalAirport;
+      // If airports are different (likely international), use sum method
+      if (firstAirport && lastAirport && firstAirport !== lastAirport) {
+        // Use sum method to avoid timezone offset errors
         return calculateTotalDurationBySum(segments, layovers);
       }
     }
@@ -305,6 +349,7 @@ export function calculateTotalDuration(
   }
   
   // Calculate duration from UTC times (timezone-aware)
+  // This gives elapsed wall-clock time, which may differ from actual flight time due to timezones
   const durationMs = finalArrivalUTC.getTime() - firstDepartureUTC.getTime();
   const durationMinutes = Math.round(durationMs / (1000 * 60));
   
@@ -312,6 +357,16 @@ export function calculateTotalDuration(
   if (durationMinutes < 0 || durationMinutes > 2880) {
     // Fallback to sum method if UTC calculation seems wrong
     return calculateTotalDurationBySum(segments, layovers);
+  }
+  
+  // If we have segment durations available, prefer sum method over timezone calculation
+  // because sum gives actual flight time (what users expect), while timezone calc gives wall-clock time
+  if (hasAnySegmentDurations) {
+    const sumResult = calculateTotalDurationBySum(segments, layovers);
+    // Use sum if it's reasonable, otherwise use timezone calculation
+    if (sumResult > 0 && sumResult <= 2880) {
+      return sumResult;
+    }
   }
   
   return durationMinutes;
@@ -456,6 +511,7 @@ export function getAllLayoverDurations(
   segments: Array<{
     arrivalTime: string;
     departureTime?: string;
+    arrivalAirport?: string; // Added for timezone-aware calculation
   }>,
   layovers?: Array<{
     duration?: number | string;
@@ -484,10 +540,14 @@ export function getAllLayoverDurations(
     const seg2 = segments[i + 1];
     
     if (seg1.arrivalTime && seg2.departureTime) {
+      // Pass the arrival airport code for timezone-aware calculation
+      // The layover occurs at the arrival airport of the first segment
+      const layoverAirport = seg1.arrivalAirport;
       const layoverDur = calculateLayoverDuration(
         seg1.arrivalTime,
         seg2.departureTime,
-        baseDate
+        baseDate,
+        layoverAirport
       );
       layoverDurations.push(layoverDur);
     } else {
