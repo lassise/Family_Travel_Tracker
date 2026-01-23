@@ -1116,6 +1116,7 @@ const Flights = () => {
                             canGoBack={index > 0}
                             onGoBack={() => handleGoBackToLeg(legId)}
                             nextLegLabel={nextLegLabel || undefined}
+                            preferNonstop={preferences.prefer_nonstop || stopsFilter === "nonstop"}
                           />
                         </TabsContent>
                       );
@@ -1131,32 +1132,33 @@ const Flights = () => {
                   
                   return (
                     <div key={legId} id={`leg-${legId}`}>
-                      <FlightLegResults
-                        legId={legId}
-                        legLabel={legInfo.label}
-                        origin={legInfo.origin}
-                        destination={legInfo.destination}
-                        date={legInfo.date}
-                        flights={result.flights}
-                        isLoading={result.isLoading}
-                        error={result.error}
-                        selectedFlightId={selectedForLeg?.flight.id || null}
-                        onSelectFlight={(flight) => handleSelectFlight(legId, legInfo.label, flight, legInfo.origin, legInfo.destination, legInfo.date)}
-                        onConfirmSelection={() => handleConfirmLeg(legId)}
-                        onRetry={() => retryLeg(legId, legInfo.origin, legInfo.destination, legInfo.date)}
-                        isAvoidedAirline={isAvoidedAirline}
-                        formatTime={formatTime}
-                        formatDate={formatDate}
-                        isLocked={false}
-                        lockedMessage=""
-                        passengers={passengers}
-                        isConfirmed={isConfirmed}
-                        canGoBack={false}
-                        nextLegLabel={undefined}
-                        tripType={tripType}
-                        onContinueToGoogle={() => handleContinueToGoogle()}
-                        onCopyChecklist={() => toast.success("Checklist copied to clipboard")}
-                      />
+                          <FlightLegResults
+                            legId={legId}
+                            legLabel={legInfo.label}
+                            origin={legInfo.origin}
+                            destination={legInfo.destination}
+                            date={legInfo.date}
+                            flights={result.flights}
+                            isLoading={result.isLoading}
+                            error={result.error}
+                            selectedFlightId={selectedForLeg?.flight.id || null}
+                            onSelectFlight={(flight) => handleSelectFlight(legId, legInfo.label, flight, legInfo.origin, legInfo.destination, legInfo.date)}
+                            onConfirmSelection={() => handleConfirmLeg(legId)}
+                            onRetry={() => retryLeg(legId, legInfo.origin, legInfo.destination, legInfo.date)}
+                            isAvoidedAirline={isAvoidedAirline}
+                            formatTime={formatTime}
+                            formatDate={formatDate}
+                            isLocked={false}
+                            lockedMessage=""
+                            passengers={passengers}
+                            isConfirmed={isConfirmed}
+                            canGoBack={false}
+                            nextLegLabel={undefined}
+                            tripType={tripType}
+                            onContinueToGoogle={() => handleContinueToGoogle()}
+                            onCopyChecklist={() => toast.success("Checklist copied to clipboard")}
+                            preferNonstop={preferences.prefer_nonstop || stopsFilter === "nonstop"}
+                          />
                     </div>
                   );
                 })}

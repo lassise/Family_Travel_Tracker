@@ -41,8 +41,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ScoredFlight } from "@/lib/flightScoring";
-import { AIRLINES } from "@/lib/airportsData";
+import { AIRLINES, getAirportByCode, formatAirportLocation } from "@/lib/airportsData";
 import { toast } from "sonner";
+import { calculateTotalDuration, calculateLayoverDuration } from "@/lib/flightDurationUtils";
 
 interface FlightLegResultsProps {
   legId: string;
@@ -70,6 +71,7 @@ interface FlightLegResultsProps {
   tripType?: "oneway" | "roundtrip" | "multicity";
   onContinueToGoogle?: () => void;
   onCopyChecklist?: () => void;
+  preferNonstop?: boolean; // Whether user prefers nonstop flights
 }
 
 // Get airline info from code
@@ -165,24 +167,36 @@ export const FlightLegResults = ({
   tripType,
   onContinueToGoogle,
   onCopyChecklist,
+  preferNonstop = false,
 }: FlightLegResultsProps) => {
   const [isExpanded, setIsExpanded] = useState(!isLocked && !isConfirmed);
   const [showAll, setShowAll] = useState(false);
   const [expandedFlightId, setExpandedFlightId] = useState<string | null>(null);
   const [priceAlertFlight, setPriceAlertFlight] = useState<ScoredFlight | null>(null);
 
-  // Sort flights to put avoided airlines at the bottom
+  // Sort flights: nonstop first (if prefer_nonstop), then avoided airlines at bottom
   const sortedFlights = [...flights].sort((a, b) => {
     const aAirline = a.itineraries[0]?.segments[0]?.airline || "";
     const bAirline = b.itineraries[0]?.segments[0]?.airline || "";
     const aAvoided = isAvoidedAirline(aAirline) || a.isAvoidedAirline;
     const bAvoided = isAvoidedAirline(bAirline) || b.isAvoidedAirline;
     
-    // Avoided airlines go to the bottom
+    // Check if flights are nonstop
+    const aIsNonstop = a.itineraries.every(it => it.segments.length === 1);
+    const bIsNonstop = b.itineraries.every(it => it.segments.length === 1);
+    
+    // If preferNonstop is set, nonstop flights come first (before avoided check)
+    // This ensures nonstop flights appear above layover flights regardless of score
+    if (preferNonstop) {
+      if (aIsNonstop && !bIsNonstop) return -1;
+      if (!aIsNonstop && bIsNonstop) return 1;
+    }
+    
+    // Avoided airlines go to the bottom (but only after nonstop sorting)
     if (aAvoided && !bAvoided) return 1;
     if (!aAvoided && bAvoided) return -1;
     
-    // Within same category, maintain score order
+    // Within same category (nonstop status and avoided status), sort by score
     return b.score - a.score;
   });
   
@@ -207,18 +221,28 @@ export const FlightLegResults = ({
   const fastest =
     featuredFlights.length > 0
       ? [...featuredFlights].sort((a, b) => {
-          const aDur = a.itineraries.reduce(
-            (sum, it) =>
-              sum +
-              it.segments.reduce((s, seg) => s + (typeof seg.duration === "number" ? seg.duration : 0), 0),
-            0
-          );
-          const bDur = b.itineraries.reduce(
-            (sum, it) =>
-              sum +
-              it.segments.reduce((s, seg) => s + (typeof seg.duration === "number" ? seg.duration : 0), 0),
-            0
-          );
+          // Calculate duration correctly for both flights
+          const aItinerary = a.itineraries[0];
+          const bItinerary = b.itineraries[0];
+          
+          const aDur = aItinerary ? (() => {
+            const calculated = calculateTotalDuration(aItinerary.segments, a.layovers, date);
+            if (calculated !== null && calculated > 0) return calculated;
+            // Fallback
+            const segSum = aItinerary.segments.reduce((s, seg) => s + (typeof seg.duration === "number" ? seg.duration : 0), 0);
+            const laySum = (a.layovers || []).reduce((s, lay) => s + (typeof lay.duration === "number" ? lay.duration : 0), 0);
+            return segSum + laySum;
+          })() : a.totalDuration || 0;
+          
+          const bDur = bItinerary ? (() => {
+            const calculated = calculateTotalDuration(bItinerary.segments, b.layovers, date);
+            if (calculated !== null && calculated > 0) return calculated;
+            // Fallback
+            const segSum = bItinerary.segments.reduce((s, seg) => s + (typeof seg.duration === "number" ? seg.duration : 0), 0);
+            const laySum = (b.layovers || []).reduce((s, lay) => s + (typeof lay.duration === "number" ? lay.duration : 0), 0);
+            return segSum + laySum;
+          })() : b.totalDuration || 0;
+          
           return aDur - bDur;
         })[0]
       : null;
@@ -304,10 +328,33 @@ export const FlightLegResults = ({
   const selectedFirstSeg = selectedFlight?.itineraries[0]?.segments[0];
   const selectedLastSeg = selectedFlight?.itineraries[0]?.segments[selectedFlight?.itineraries[0]?.segments.length - 1];
   const selectedStops = (selectedFlight?.itineraries[0]?.segments.length || 1) - 1;
-  const selectedDuration = selectedFlight?.itineraries.reduce(
-    (sum, it) => sum + it.segments.reduce((s, seg) => s + (typeof seg.duration === "number" ? seg.duration : 0), 0),
-    0
-  ) || 0;
+  // Calculate duration correctly including all segments and layovers
+  const selectedDuration = selectedFlight ? (() => {
+    const itinerary = selectedFlight.itineraries[0];
+    if (!itinerary || !itinerary.segments || itinerary.segments.length === 0) return 0;
+    
+    // Use the utility function to calculate total duration
+    const calculated = calculateTotalDuration(
+      itinerary.segments,
+      selectedFlight.layovers,
+      date // Use the leg date as base date
+    );
+    
+    // Fallback to sum if calculation fails
+    if (calculated === null || calculated === 0) {
+      const segmentsSum = itinerary.segments.reduce(
+        (sum, seg) => sum + (typeof seg.duration === "number" ? seg.duration : 0),
+        0
+      );
+      const layoversSum = (selectedFlight.layovers || []).reduce(
+        (sum, lay) => sum + (typeof lay.duration === "number" ? lay.duration : 0),
+        0
+      );
+      return segmentsSum + layoversSum;
+    }
+    
+    return calculated;
+  })() : 0;
 
   // Confirmed state - show summary with ability to change
   if (isConfirmed && selectedFlight) {
@@ -478,34 +525,6 @@ export const FlightLegResults = ({
 
         <CollapsibleContent>
           <CardContent className="pt-0 space-y-4">
-            {/* Confirm selection button - sticky at top when flight is selected */}
-            {selectedFlightId && !isConfirmed && (
-              <div className="sticky top-0 z-10 bg-background border-b pb-3 -mx-6 px-6 pt-3">
-                <div className="flex items-center justify-between gap-3 p-3 bg-primary/10 rounded-lg border border-primary/30">
-                  <div className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">Flight selected</span>
-                  </div>
-                  <Button 
-                    size="sm" 
-                    className="gap-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onConfirmSelection();
-                    }}
-                  >
-                    Confirm {legLabel}
-                    {nextLegLabel && (
-                      <>
-                        <ArrowRight className="h-3 w-3" />
-                        <span className="text-xs opacity-80">Next: {nextLegLabel}</span>
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            )}
-
             {/* Quick category badges */}
             <div className="flex flex-wrap gap-2">
               {bestOverall && (
@@ -531,15 +550,39 @@ export const FlightLegResults = ({
               const lastSeg =
                 flight.itineraries[0]?.segments[flight.itineraries[0]?.segments.length - 1];
               const stops = (flight.itineraries[0]?.segments.length || 1) - 1;
-              const duration = flight.itineraries.reduce(
-                (sum, it) =>
-                  sum +
-                  it.segments.reduce(
-                    (s, seg) => s + (typeof seg.duration === "number" ? seg.duration : 0),
+              // Calculate duration correctly including all segments and layovers
+              const duration = (() => {
+                const itinerary = flight.itineraries[0];
+                if (!itinerary || !itinerary.segments || itinerary.segments.length === 0) {
+                  return flight.totalDuration || 0;
+                }
+                
+                // Use the utility function to calculate total duration
+                const calculated = calculateTotalDuration(
+                  itinerary.segments,
+                  flight.layovers,
+                  date // Use the leg date as base date
+                );
+                
+                // Fallback to flight.totalDuration or sum if calculation fails
+                if (calculated === null || calculated === 0) {
+                  if (flight.totalDuration) {
+                    return flight.totalDuration;
+                  }
+                  // Sum all segments + all layovers
+                  const segmentsSum = itinerary.segments.reduce(
+                    (sum, seg) => sum + (typeof seg.duration === "number" ? seg.duration : 0),
                     0
-                  ),
-                0
-              );
+                  );
+                  const layoversSum = (flight.layovers || []).reduce(
+                    (sum, lay) => sum + (typeof lay.duration === "number" ? lay.duration : 0),
+                    0
+                  );
+                  return segmentsSum + layoversSum;
+                }
+                
+                return calculated;
+              })();
               const isSelected = flight.id === selectedFlightId;
               const flightAirline = firstSeg?.airline || "";
               const isAvoided = isAvoidedAirline(flightAirline);
@@ -938,6 +981,118 @@ export const FlightLegResults = ({
                           </div>
                         )}
 
+                        {/* Flight itinerary with layovers */}
+                        {flight.itineraries[0]?.segments && flight.itineraries[0].segments.length > 0 && (
+                          <div className="pt-2 border-t">
+                            <p className="text-xs font-medium mb-2">Flight itinerary</p>
+                            <div className="space-y-3">
+                              {flight.itineraries[0].segments.map((segment, segIndex) => {
+                                const isLastSegment = segIndex === flight.itineraries[0].segments.length - 1;
+                                const nextSegment = !isLastSegment ? flight.itineraries[0].segments[segIndex + 1] : null;
+                                
+                                // Calculate layover duration if there's a next segment
+                                let layoverMinutes = 0;
+                                let layoverAirportCode = '';
+                                if (nextSegment) {
+                                  layoverAirportCode = segment.arrivalAirport;
+                                  layoverMinutes = calculateLayoverDuration(
+                                    segment.arrivalTime,
+                                    nextSegment.departureTime,
+                                    date,
+                                    layoverAirportCode // Pass airport code for timezone-aware calculation
+                                  );
+                                }
+                                
+                                return (
+                                  <div key={segIndex} className="space-y-2">
+                                    {/* Flight segment */}
+                                    <div className="flex items-start gap-3 text-xs">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <Badge variant="outline" className="text-[10px] h-5">
+                                            {segment.airline} {segment.flightNumber}
+                                          </Badge>
+                                          <span className="text-muted-foreground">
+                                            {typeof segment.duration === 'number' 
+                                              ? `${Math.floor(segment.duration / 60)}h ${segment.duration % 60}m`
+                                              : segment.duration}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex-1">
+                                            <p className="font-medium">{formatTime(segment.departureTime)}</p>
+                                            <p className="text-muted-foreground">{segment.departureAirport}</p>
+                                          </div>
+                                          <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                          <div className="flex-1 text-right">
+                                            <p className="font-medium">{formatTime(segment.arrivalTime)}</p>
+                                            <p className="text-muted-foreground">{segment.arrivalAirport}</p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Layover information */}
+                                    {nextSegment && layoverAirportCode && layoverMinutes > 0 && (
+                                      <div className="ml-4 pl-3 border-l-2 border-muted-foreground/30">
+                                        <div className="flex items-start gap-2 text-xs">
+                                          <Clock className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                                          <div className="flex-1">
+                                            {(() => {
+                                              const layoverAirport = getAirportByCode(layoverAirportCode);
+                                              const airportName = layoverAirport?.name;
+                                              const airportLocation = formatAirportLocation(layoverAirport);
+                                              const isShortLayover = layoverMinutes < 70;
+                                              const hours = Math.floor(layoverMinutes / 60);
+                                              const mins = layoverMinutes % 60;
+                                              const durationStr = hours > 0 
+                                                ? `${hours}h ${mins}m`
+                                                : `${mins}m`;
+                                              
+                                              return (
+                                                <div className="space-y-1">
+                                                  <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="font-medium text-muted-foreground">
+                                                      Layover:
+                                                    </span>
+                                                    {airportName ? (
+                                                      <>
+                                                        <span>{airportName}</span>
+                                                        <span className="font-medium">({layoverAirportCode})</span>
+                                                      </>
+                                                    ) : (
+                                                      <span className="font-medium">({layoverAirportCode})</span>
+                                                    )}
+                                                    {airportLocation && (
+                                                      <span className="text-muted-foreground">• {airportLocation}</span>
+                                                    )}
+                                                    <span className="text-muted-foreground">
+                                                      • {durationStr}
+                                                    </span>
+                                                  </div>
+                                                  {isShortLayover && (
+                                                    <Badge 
+                                                      variant="outline" 
+                                                      className="text-[10px] bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 mt-1 inline-flex items-center gap-1"
+                                                    >
+                                                      <AlertTriangle className="h-2.5 w-2.5" />
+                                                      Tight connection
+                                                    </Badge>
+                                                  )}
+                                                </div>
+                                              );
+                                            })()}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Delay risk */}
                         <div className="pt-2 border-t">
                           <p className="text-xs font-medium mb-1">Delay risk assessment</p>
@@ -1024,6 +1179,34 @@ export const FlightLegResults = ({
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
+                  
+                  {/* Confirm selection button - appears right below selected flight */}
+                  {isSelected && !isConfirmed && (
+                    <div className="mt-3 mx-3 mb-3">
+                      <div className="flex items-center justify-between gap-3 p-3 bg-primary/10 rounded-lg border border-primary/30">
+                        <div className="flex items-center gap-2">
+                          <Check className="h-4 w-4 text-primary" />
+                          <span className="text-sm font-medium">Flight selected</span>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          className="gap-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onConfirmSelection();
+                          }}
+                        >
+                          Confirm {legLabel}
+                          {nextLegLabel && (
+                            <>
+                              <ArrowRight className="h-3 w-3" />
+                              <span className="text-xs opacity-80">Next: {nextLegLabel}</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

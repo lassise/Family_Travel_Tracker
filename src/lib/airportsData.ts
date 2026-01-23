@@ -345,3 +345,21 @@ export const AIRPORT_QUALITY: Record<string, { score: number; notes: string }> =
 export const getAirportQuality = (code: string): { score: number; notes: string } => {
   return AIRPORT_QUALITY[code] || { score: 70, notes: "Standard airport" };
 };
+
+// Get airport information by code
+export const getAirportByCode = (code: string): Airport | null => {
+  if (!code) return null;
+  return ALL_AIRPORTS.find(a => a.code.toUpperCase() === code.toUpperCase()) || null;
+};
+
+// Format airport location string (City, Country or City, State, Country for US)
+export const formatAirportLocation = (airport: Airport | null): string => {
+  if (!airport) return '';
+  
+  if (airport.country === 'US' && airport.state) {
+    return `${airport.city}, ${airport.state}`;
+  }
+  
+  const countryName = getCountryName(airport.country);
+  return `${airport.city}, ${countryName}`;
+};
