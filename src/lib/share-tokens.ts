@@ -262,34 +262,74 @@ export async function diagnoseShareSystem(userId: string): Promise<ShareDiagnost
     diagnostics.tableExists = shareLinksExists;
 
     if (shareLinksExists) {
-      // Test insert/delete
-      const testToken = generateToken().toLowerCase();
-      const { data, error } = await supabase
+      // Check if user already has a share link first
+      const { data: existingLink, error: fetchError } = await supabase
         .from('share_links')
-        .insert({
-          token: testToken,
-          owner_user_id: userId,
-          is_active: true,
-          include_stats: true,
-          include_countries: true,
-          include_memories: false,
-        })
-        .select()
-        .single();
+        .select('token, is_active')
+        .eq('owner_user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle();
 
-      if (error) {
-        diagnostics.error = error.message;
-        diagnostics.errorDetails = error;
-      } else if (data) {
-        // Clean up test record
-        await supabase
-          .from('share_links')
-          .delete()
-          .eq('id', data.id);
-
+      if (fetchError && !fetchError.message.includes('does not exist')) {
+        diagnostics.error = `Failed to check existing links: ${fetchError.message}`;
+        diagnostics.errorDetails = fetchError;
+      } else if (existingLink) {
+        // User already has a share link - use it for diagnostics
         diagnostics.success = true;
         diagnostics.method = 'share_links';
-        diagnostics.token = testToken;
+        diagnostics.token = existingLink.token;
+        const baseUrl = window.location.origin;
+        diagnostics.url = `${baseUrl}/share/dashboard/${existingLink.token}`;
+      } else {
+        // No existing link - try to create a test one
+        const testToken = generateToken().toLowerCase();
+        const { data, error } = await supabase
+          .from('share_links')
+          .insert({
+            token: testToken,
+            owner_user_id: userId,
+            is_active: true,
+            include_stats: true,
+            include_countries: true,
+            include_memories: false,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          // If duplicate key error, try to find the existing link
+          if (error.code === '23505' || error.message.includes('duplicate key')) {
+            const { data: conflictLink } = await supabase
+              .from('share_links')
+              .select('token, is_active')
+              .eq('owner_user_id', userId)
+              .maybeSingle();
+            
+            if (conflictLink) {
+              diagnostics.success = true;
+              diagnostics.method = 'share_links';
+              diagnostics.token = conflictLink.token;
+              const baseUrl = window.location.origin;
+              diagnostics.url = `${baseUrl}/share/dashboard/${conflictLink.token}`;
+            } else {
+              diagnostics.error = `Duplicate key constraint exists but no link found. ${error.message}`;
+              diagnostics.errorDetails = error;
+            }
+          } else {
+            diagnostics.error = error.message;
+            diagnostics.errorDetails = error;
+          }
+        } else if (data) {
+          // Successfully created test record - clean it up
+          await supabase
+            .from('share_links')
+            .delete()
+            .eq('id', data.id);
+
+          diagnostics.success = true;
+          diagnostics.method = 'share_links';
+          diagnostics.token = testToken;
+        }
       }
     } else {
       // Check legacy system
