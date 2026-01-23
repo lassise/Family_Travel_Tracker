@@ -360,41 +360,67 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
                         return countryTrips.length > 0 ? (
                           <div>
                             <p className="text-xs font-medium text-muted-foreground mb-2">
-                              Logged trips ({countryTrips.length}):
+                              Logged Trips ({countryTrips.length})
                             </p>
                             <div className="max-h-40 overflow-y-auto pr-1 space-y-1">
                               {countryTrips.map((trip) => {
-                                let tripDisplay = "";
-                                if (trip.trip_name) {
-                                  tripDisplay = trip.trip_name;
-                                } else if (trip.visit_date) {
+                                // Build date display - prioritize exact dates
+                                let dateDisplay = "";
+                                let hasExactDate = false;
+                                
+                                if (trip.visit_date) {
                                   try {
                                     const startDate = format(parseISO(trip.visit_date), "MMM d, yyyy");
                                     if (trip.end_date) {
                                       try {
                                         const endDate = format(parseISO(trip.end_date), "MMM d, yyyy");
-                                        tripDisplay = `${startDate} - ${endDate}`;
+                                        dateDisplay = `${startDate} - ${endDate}`;
+                                        hasExactDate = true;
                                       } catch {
-                                        tripDisplay = startDate;
+                                        dateDisplay = startDate;
+                                        hasExactDate = true;
                                       }
                                     } else {
-                                      tripDisplay = startDate;
+                                      dateDisplay = startDate;
+                                      hasExactDate = true;
                                     }
                                   } catch {
                                     // Fallback if date parsing fails
-                                    tripDisplay = trip.visit_date || "Date unknown";
+                                    dateDisplay = trip.visit_date || "";
                                   }
                                 } else if (trip.approximate_year) {
                                   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
                                   const monthName = trip.approximate_month && trip.approximate_month >= 1 && trip.approximate_month <= 12
                                     ? months[trip.approximate_month - 1]
                                     : "";
-                                  tripDisplay = [monthName, trip.approximate_year].filter(Boolean).join(" ") || `${trip.approximate_year}`;
-                                } else {
-                                  tripDisplay = "Date unknown";
+                                  dateDisplay = [monthName, trip.approximate_year].filter(Boolean).join(" ") || `${trip.approximate_year}`;
                                 }
                                 
                                 const daysText = trip.number_of_days ? ` • ${trip.number_of_days} day${trip.number_of_days !== 1 ? "s" : ""}` : "";
+                                
+                                // Build display text: when we have exact dates, show them prominently
+                                // Format: "Trip Name • Date Range • Days" or just "Date Range • Days" if no trip name
+                                let displayText = "";
+                                if (hasExactDate && dateDisplay) {
+                                  // We have exact dates - show them prominently
+                                  if (trip.trip_name) {
+                                    displayText = `${trip.trip_name} • ${dateDisplay}${daysText}`;
+                                  } else {
+                                    displayText = `${dateDisplay}${daysText}`;
+                                  }
+                                } else if (trip.trip_name) {
+                                  // No exact date, but we have trip name
+                                  if (dateDisplay) {
+                                    displayText = `${trip.trip_name} • ${dateDisplay}${daysText}`;
+                                  } else {
+                                    displayText = trip.trip_name + daysText;
+                                  }
+                                } else if (dateDisplay) {
+                                  // Just date (approximate)
+                                  displayText = dateDisplay + daysText;
+                                } else {
+                                  displayText = "Date unknown";
+                                }
                                 
                                 return (
                                   <Button
@@ -409,7 +435,7 @@ const CountryTracker = ({ countries, familyMembers, onUpdate, selectedMemberId, 
                                   >
                                     <Calendar className="w-3 h-3 text-muted-foreground mr-2 flex-shrink-0" />
                                     <span className="text-foreground text-left">
-                                      {tripDisplay}{daysText}
+                                      {displayText}
                                     </span>
                                   </Button>
                                 );

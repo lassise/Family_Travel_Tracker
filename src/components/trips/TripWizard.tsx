@@ -106,8 +106,16 @@ const TripWizard = () => {
         return true;
       case 2:
         // Destination required, dates only if they said they have them
-        if (!formData.destination) return false;
-        if (formData.hasDates && (!formData.startDate || !formData.endDate)) return false;
+        if (!formData.destination.trim()) return false;
+        if (formData.hasDates) {
+          if (!formData.startDate || !formData.endDate) return false;
+          // Validate end date is after start date
+          if (formData.startDate && formData.endDate) {
+            const start = new Date(formData.startDate);
+            const end = new Date(formData.endDate);
+            if (end <= start) return false;
+          }
+        }
         return true;
       case 3:
         // Kids ages only required if traveling with kids
@@ -126,7 +134,7 @@ const TripWizard = () => {
   };
 
   const handleNext = () => {
-    if (currentStep < STEPS.length) {
+    if (currentStep < STEPS.length && canProceed()) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -218,8 +226,18 @@ const TripWizard = () => {
 
       if (itineraryError) {
         // Handle specific error codes with user-friendly messages
-        const errorData = itineraryError.message ? JSON.parse(itineraryError.message) : {};
-        const errorCode = errorData.code;
+        let errorData: any = {};
+        let errorCode: string | undefined;
+        
+        try {
+          if (itineraryError.message) {
+            errorData = JSON.parse(itineraryError.message);
+            errorCode = errorData.code;
+          }
+        } catch {
+          // If parsing fails, treat as generic error
+          errorData = { error: itineraryError.message || 'Unknown error' };
+        }
         
         switch (errorCode) {
           case 'RATE_LIMITED':
@@ -233,9 +251,9 @@ const TripWizard = () => {
             toast.error("Please check your trip details: " + (errorData.details?.[0] || "Invalid input"));
             break;
           default:
-            toast.error(errorData.error || "Failed to generate itinerary. Please try again.");
+            toast.error(errorData.error || itineraryError.message || "Failed to generate itinerary. Please try again.");
         }
-        throw new Error(errorData.error || 'Generation failed');
+        throw new Error(errorData.error || itineraryError.message || 'Generation failed');
       }
 
       const { itinerary, meta } = itineraryData;

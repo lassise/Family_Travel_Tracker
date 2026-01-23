@@ -30,18 +30,26 @@ export const KidsStep = ({ formData, updateFormData }: KidsStepProps) => {
 
   const addKidAge = () => {
     const age = parseInt(newAge);
-    if (!isNaN(age) && age >= 0 && age <= 18) {
-      updateFormData({ kidsAges: [...formData.kidsAges, age] });
-      setNewAge("");
+    if (!isNaN(age) && age >= 2 && age <= 18) {
+      // Prevent duplicate ages
+      if (!formData.kidsAges.includes(age)) {
+        updateFormData({ kidsAges: [...formData.kidsAges, age] });
+        setNewAge("");
+      } else {
+        // Could show a toast here, but for now just don't add
+        setNewAge("");
+      }
     }
   };
 
   const addInfantByMonths = (months: number) => {
-    // Store as negative to indicate months (e.g., -6 = 6 months old)
-    // Or we can store as decimal (0.5 = 6 months)
-    // Let's store as decimal for clarity
+    // Store as decimal for clarity (0.5 = 6 months)
     const ageInYears = months / 12;
-    updateFormData({ kidsAges: [...formData.kidsAges, ageInYears] });
+    // Prevent duplicate ages (check if same age already exists within 0.01 tolerance)
+    const isDuplicate = formData.kidsAges.some(age => Math.abs(age - ageInYears) < 0.01);
+    if (!isDuplicate) {
+      updateFormData({ kidsAges: [...formData.kidsAges, ageInYears] });
+    }
     setInfantMonths("");
   };
 

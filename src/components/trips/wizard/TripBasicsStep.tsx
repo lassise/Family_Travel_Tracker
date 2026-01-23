@@ -75,7 +75,13 @@ export const TripBasicsStep = ({ formData, updateFormData }: TripBasicsStepProps
           <Switch
             id="hasDates"
             checked={formData.hasDates}
-            onCheckedChange={(checked) => updateFormData({ hasDates: checked })}
+            onCheckedChange={(checked) => {
+              updateFormData({ 
+                hasDates: checked,
+                // Clear dates if user unchecks
+                ...(checked ? {} : { startDate: "", endDate: "" })
+              });
+            }}
           />
         </div>
 
@@ -130,9 +136,24 @@ export const TripBasicsStep = ({ formData, updateFormData }: TripBasicsStepProps
               id="endDate"
               type="date"
               value={formData.endDate}
-              min={formData.startDate}
-              onChange={(e) => updateFormData({ endDate: e.target.value })}
+              min={formData.startDate || undefined}
+              onChange={(e) => {
+                const endDate = e.target.value;
+                // Validate end date is after start date
+                if (formData.startDate && endDate) {
+                  const start = new Date(formData.startDate);
+                  const end = new Date(endDate);
+                  if (end <= start) {
+                    // Don't update if invalid, or show error
+                    return;
+                  }
+                }
+                updateFormData({ endDate });
+              }}
             />
+            {formData.startDate && formData.endDate && new Date(formData.endDate) <= new Date(formData.startDate) && (
+              <p className="text-xs text-destructive">End date must be after start date</p>
+            )}
           </div>
         </div>
       )}
