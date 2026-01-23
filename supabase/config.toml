@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.search-flights]
 verify_jwt = false
+
+[functions.get-public-dashboard]
+verify_jwt = false
+
+[functions.get-or-create-share-link]
+verify_jwt = false

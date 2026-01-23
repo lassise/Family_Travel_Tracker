@@ -108,12 +108,12 @@ Deno.serve(async (req) => {
     let shareProfile: any = null;
     let shareSettings: any = null;
 
-    // Step 1: Try new share_links table first
+    // Step 1: Try new share_links table first (case-insensitive lookup)
     (debug.query_steps as string[]).push("lookup_share_links");
     const { data: shareLink, error: shareLinkError } = await supabase
       .from("share_links")
       .select("*")
-      .eq("token", tokenNormalized)
+      .ilike("token", tokenNormalized)
       .eq("is_active", true)
       .maybeSingle();
 
@@ -136,12 +136,12 @@ Deno.serve(async (req) => {
         show_wishlist: false, // Not in new system yet
       };
     } else {
-      // Step 2: Fall back to old share_profiles table
+      // Step 2: Fall back to old share_profiles table (case-insensitive lookup)
       (debug.query_steps as string[]).push("lookup_share_profile");
       const { data: oldShareProfile, error: shareError } = await supabase
         .from("share_profiles")
         .select("*")
-        .eq("dashboard_share_token", tokenNormalized)
+        .ilike("dashboard_share_token", tokenNormalized)
         .eq("is_public", true)
         .maybeSingle();
 
