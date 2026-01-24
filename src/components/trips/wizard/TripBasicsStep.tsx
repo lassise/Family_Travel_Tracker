@@ -3,7 +3,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { TripFormData } from "../TripWizard";
-import { MapPin, Calendar, Hotel, Users, Briefcase, Palmtree, ArrowRightLeft } from "lucide-react";
+import { Calendar, Hotel, Users, Briefcase, Palmtree, ArrowRightLeft } from "lucide-react";
+import MultiCountrySelect from "../MultiCountrySelect";
+import type { CountryOption } from "@/lib/countriesData";
 
 interface TripBasicsStepProps {
   formData: TripFormData;
@@ -17,20 +19,38 @@ const PURPOSE_OPTIONS = [
 ];
 
 export const TripBasicsStep = ({ formData, updateFormData }: TripBasicsStepProps) => {
+  const handleCountriesChange = (countries: CountryOption[]) => {
+    updateFormData({ 
+      countries,
+      // Set destination to comma-separated list for backward compatibility
+      destination: countries.map(c => c.name).join(", ")
+    });
+  };
+
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <Label htmlFor="destination" className="flex items-center gap-2">
-          <MapPin className="h-4 w-4" />
-          Where are you going?
-        </Label>
-        <Input
-          id="destination"
-          placeholder="e.g., Paris, France or Disney World, Orlando"
-          value={formData.destination}
-          onChange={(e) => updateFormData({ destination: e.target.value })}
-        />
-      </div>
+      {/* Multi-Country Selector */}
+      <MultiCountrySelect
+        selectedCountries={formData.countries || []}
+        onChange={handleCountriesChange}
+        label="Where are you going?"
+        placeholder="Select destination countries..."
+      />
+
+      {/* Fallback destination input for free-text entry (optional) */}
+      {formData.countries?.length === 0 && (
+        <div className="space-y-2">
+          <Label htmlFor="destination" className="text-sm text-muted-foreground">
+            Or type a destination
+          </Label>
+          <Input
+            id="destination"
+            placeholder="e.g., Paris, France or Disney World, Orlando"
+            value={formData.destination}
+            onChange={(e) => updateFormData({ destination: e.target.value })}
+          />
+        </div>
+      )}
 
       {/* Trip Purpose */}
       <div className="space-y-3">

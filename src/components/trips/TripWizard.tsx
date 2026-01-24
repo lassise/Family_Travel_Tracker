@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useTrips } from "@/hooks/useTrips";
+import { useTripCountries } from "@/hooks/useTripCountries";
 import { supabase } from "@/integrations/supabase/client";
 import { TripBasicsStep } from "./wizard/TripBasicsStep";
 import { KidsStep } from "./wizard/KidsStep";
@@ -15,10 +16,12 @@ import { ReviewStep } from "./wizard/ReviewStep";
 import { PlannerModeStep, type ClientInfo } from "./wizard/PlannerModeStep";
 import { ContextStep } from "./wizard/ContextStep";
 import { useTravelProfiles } from "@/hooks/useTravelProfiles";
+import type { CountryOption } from "@/lib/countriesData";
 
 export interface TripFormData {
   title: string;
   destination: string;
+  countries: CountryOption[]; // NEW: Multi-country support
   startDate: string;
   endDate: string;
   hasDates: boolean;
@@ -41,6 +44,8 @@ export interface TripFormData {
   // Accessibility
   needsWheelchairAccess: boolean;
   hasStroller: boolean;
+  // Pre-selected member IDs from Quick Add
+  preselectedMemberIds?: string[];
 }
 
 const STEPS = [
@@ -56,6 +61,7 @@ const STEPS = [
 const TripWizard = () => {
   const navigate = useNavigate();
   const { createTrip } = useTrips();
+  const { addTripCountries } = useTripCountries();
   const { profiles, activeProfile } = useTravelProfiles();
   const [currentStep, setCurrentStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -63,6 +69,7 @@ const TripWizard = () => {
   const [formData, setFormData] = useState<TripFormData>({
     title: "",
     destination: "",
+    countries: [], // NEW: Initialize empty
     startDate: "",
     endDate: "",
     hasDates: true,
@@ -92,6 +99,27 @@ const TripWizard = () => {
     needsWheelchairAccess: false,
     hasStroller: false,
   });
+
+  // Check for pre-selected country from AddCountryModal
+  useEffect(() => {
+    const stored = sessionStorage.getItem('tripPreselectedCountry');
+    if (stored) {
+      try {
+        const { country, memberIds } = JSON.parse(stored);
+        if (country) {
+          setFormData(prev => ({
+            ...prev,
+            countries: [country],
+            destination: country.name,
+            preselectedMemberIds: memberIds || [],
+          }));
+        }
+        sessionStorage.removeItem('tripPreselectedCountry');
+      } catch (e) {
+        console.error('Error parsing preselected country:', e);
+      }
+    }
+  }, []);
 
   const updateFormData = (updates: Partial<TripFormData>) => {
     setFormData((prev) => ({ ...prev, ...updates }));
@@ -142,7 +170,10 @@ const TripWizard = () => {
     
     try {
       // Generate title if not provided
-      const tripTitle = formData.title || `${formData.destination} Family Trip`;
+      const countryNames = formData.countries.length > 0 
+        ? formData.countries.map(c => c.name).join(" & ") 
+        : formData.destination;
+      const tripTitle = formData.title || `${countryNames} Family Trip`;
       
       // Determine kids ages based on mode
       const effectiveKidsAges = formData.plannerMode === 'planner' 
@@ -176,6 +207,40 @@ const TripWizard = () => {
 
       if (tripError || !trip) {
         throw new Error(tripError?.message || 'Failed to create trip');
+      }
+
+      // Save trip countries to trip_countries table
+      if (formData.countries.length > 0) {
+        const { error: countriesError } = await addTripCountries(trip.id, formData.countries);
+        if (countriesError) {
+          console.error('Error saving trip countries:', countriesError);
+        }
+
+        // Also ensure each country exists in the countries table for the user
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          for (const country of formData.countries) {
+            // Check if country exists
+            const { data: existingCountry } = await supabase
+              .from("countries")
+              .select("id")
+              .eq("user_id", user.id)
+              .eq("name", country.name)
+              .maybeSingle();
+
+            if (!existingCountry) {
+              // Create the country
+              await supabase
+                .from("countries")
+                .insert({
+                  name: country.name,
+                  flag: country.code,
+                  continent: country.continent,
+                  user_id: user.id
+                });
+            }
+          }
+        }
       }
 
       toast.info("Generating your personalized itinerary...");

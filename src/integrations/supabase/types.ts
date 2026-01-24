@@ -1537,6 +1537,47 @@ export type Database = {
           },
         ]
       }
+      trip_countries: {
+        Row: {
+          country_code: string
+          country_name: string
+          created_at: string
+          end_date: string | null
+          id: string
+          order_index: number | null
+          start_date: string | null
+          trip_id: string
+        }
+        Insert: {
+          country_code: string
+          country_name: string
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          order_index?: number | null
+          start_date?: string | null
+          trip_id: string
+        }
+        Update: {
+          country_code?: string
+          country_name?: string
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          order_index?: number | null
+          start_date?: string | null
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_countries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_emergency_info: {
         Row: {
           created_at: string
@@ -1818,6 +1859,7 @@ export type Database = {
       }
       trips: {
         Row: {
+          archived: boolean | null
           budget_total: number | null
           cover_image: string | null
           created_at: string
@@ -1843,6 +1885,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived?: boolean | null
           budget_total?: number | null
           cover_image?: string | null
           created_at?: string
@@ -1868,6 +1911,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived?: boolean | null
           budget_total?: number | null
           cover_image?: string | null
           created_at?: string
