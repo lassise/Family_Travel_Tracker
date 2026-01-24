@@ -39,7 +39,6 @@ export interface FlightResult {
   isAlternateOrigin?: boolean;
   minSavingsRequired?: number;
   layovers?: LayoverInfo[];
-  totalDuration?: number; // Total duration in minutes including all segments and layovers
 }
 
 export interface PreferenceMatch {
@@ -1041,37 +1040,15 @@ export const scoreFlights = (
   const priceRange = maxPrice - minPrice || 1;
 
   // Pre-calculate travel times and range
-  // Use totalDuration from flight if available (includes layovers), otherwise calculate
   const travelTimes: number[] = new Array(flights.length);
   for (let i = 0; i < flights.length; i++) {
-    const flight = flights[i];
-    
-    // Prefer flight.totalDuration if available (should include all segments + layovers)
-    if (flight.totalDuration && flight.totalDuration > 0) {
-      travelTimes[i] = flight.totalDuration;
-    } else {
-      // Calculate: sum all segments + all layovers
-      let segmentsSum = 0;
-      for (const it of flight.itineraries) {
-        for (const seg of it.segments) {
-          segmentsSum += parseDuration(seg.duration);
-        }
+    let total = 0;
+    for (const it of flights[i].itineraries) {
+      for (const seg of it.segments) {
+        total += parseDuration(seg.duration);
       }
-      
-      // Add all layover durations
-      let layoversSum = 0;
-      if (flight.layovers) {
-        for (const layover of flight.layovers) {
-          if (typeof layover.duration === 'number') {
-            layoversSum += layover.duration;
-          } else if (typeof layover.duration === 'string') {
-            layoversSum += parseDuration(layover.duration);
-          }
-        }
-      }
-      
-      travelTimes[i] = segmentsSum + layoversSum;
     }
+    travelTimes[i] = total;
   }
   
   const minTime = Math.min(...travelTimes);
@@ -1152,27 +1129,15 @@ export const scoreFlights = (
     breakdown.amenities = amenityResult.score;
 
     // Calculate weighted total
-    // When prefer_nonstop is true, increase nonstop weight by 20% (from 22% to 26.4%)
-    // This makes nonstop flights score higher when it's a non-negotiable preference
-    const nonstopWeight = preferences.prefer_nonstop 
-      ? WEIGHTS.nonstop * 1.2  // 20% increase: 22 * 1.2 = 26.4
-      : WEIGHTS.nonstop;
-    
-    // Adjust other weights proportionally to maintain sum of 100
-    const weightSum = nonstopWeight + WEIGHTS.travelTime + WEIGHTS.layoverQuality + 
-                     WEIGHTS.departureTime + WEIGHTS.arrivalTime + 
-                     WEIGHTS.airlineReliability + WEIGHTS.price + WEIGHTS.amenities;
-    const weightMultiplier = 100 / weightSum; // Normalize to sum to 100
-    
     let weightedTotal = Math.round(
-      (breakdown.nonstop * nonstopWeight * weightMultiplier +
-        breakdown.travelTime * WEIGHTS.travelTime * weightMultiplier +
-        breakdown.layoverQuality * WEIGHTS.layoverQuality * weightMultiplier +
-        breakdown.departureTime * WEIGHTS.departureTime * weightMultiplier +
-        breakdown.arrivalTime * WEIGHTS.arrivalTime * weightMultiplier +
-        breakdown.airlineReliability * WEIGHTS.airlineReliability * weightMultiplier +
-        breakdown.price * WEIGHTS.price * weightMultiplier +
-        breakdown.amenities * WEIGHTS.amenities * weightMultiplier) / 100
+      (breakdown.nonstop * WEIGHTS.nonstop +
+        breakdown.travelTime * WEIGHTS.travelTime +
+        breakdown.layoverQuality * WEIGHTS.layoverQuality +
+        breakdown.departureTime * WEIGHTS.departureTime +
+        breakdown.arrivalTime * WEIGHTS.arrivalTime +
+        breakdown.airlineReliability * WEIGHTS.airlineReliability +
+        breakdown.price * WEIGHTS.price +
+        breakdown.amenities * WEIGHTS.amenities) / 100
     );
 
     // Apply massive penalty for avoided airlines - they should be at the bottom

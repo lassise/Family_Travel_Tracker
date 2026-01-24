@@ -24,7 +24,6 @@ export interface Trip {
   lodging_address: string | null;
   needs_wheelchair_access: boolean | null;
   has_stroller: boolean | null;
-  archived: boolean | null;
   created_at: string;
   updated_at: string;
 }

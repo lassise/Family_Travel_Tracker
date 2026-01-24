@@ -23,7 +23,6 @@ import {
 import { cn } from "@/lib/utils";
 import type { ScoredFlight } from "@/lib/flightScoring";
 import { toast } from "sonner";
-import { calculateTotalDuration } from "@/lib/flightDurationUtils";
 
 export interface SelectedFlight {
   legId: string;
@@ -87,39 +86,12 @@ export const FlightSelectionCart = ({
         if (!seg) return "";
 
         const stops = sel.flight.itineraries[0]?.segments.length - 1;
-        // Calculate duration correctly including all segments and layovers
-        const duration = (() => {
-          const itinerary = sel.flight.itineraries[0];
-          if (!itinerary || !itinerary.segments || itinerary.segments.length === 0) {
-            return sel.flight.totalDuration || 0;
-          }
-          
-          // Use the utility function to calculate total duration
-          const calculated = calculateTotalDuration(
-            itinerary.segments,
-            sel.flight.layovers,
-            sel.date // Use the leg date as base date
-          );
-          
-          // Fallback to flight.totalDuration or sum if calculation fails
-          if (calculated === null || calculated === 0) {
-            if (sel.flight.totalDuration) {
-              return sel.flight.totalDuration;
-            }
-            // Sum all segments + all layovers
-            const segmentsSum = itinerary.segments.reduce(
-              (sum, seg) => sum + (typeof seg.duration === "number" ? seg.duration : 0),
-              0
-            );
-            const layoversSum = (sel.flight.layovers || []).reduce(
-              (sum, lay) => sum + (typeof lay.duration === "number" ? lay.duration : 0),
-              0
-            );
-            return segmentsSum + layoversSum;
-          }
-          
-          return calculated;
-        })();
+        const duration = sel.flight.itineraries.reduce(
+          (sum, it) =>
+            sum +
+            it.segments.reduce((s, segment) => s + (typeof segment.duration === "number" ? segment.duration : 0), 0),
+          0
+        );
 
         return `${sel.legLabel}:
 • Airline: ${seg.airline} ${seg.flightNumber || ""}

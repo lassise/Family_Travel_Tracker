@@ -15,8 +15,7 @@ import {
   Loader2,
   MoreHorizontal,
   Trash2,
-  Edit,
-  Merge
+  Edit
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -26,7 +25,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PendingInvitesCard from "@/components/trips/PendingInvitesCard";
-import { CombineTripsDialog } from "@/components/trips/CombineTripsDialog";
 
 const Trips = () => {
   const { user, loading: authLoading } = useAuth();
@@ -34,10 +32,6 @@ const Trips = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get("status") || "all");
-  const [combineDialogOpen, setCombineDialogOpen] = useState(false);
-
-  // Filter out archived trips for display
-  const visibleTrips = trips.filter(t => !t.archived);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -58,8 +52,8 @@ const Trips = () => {
   };
 
   const filterTrips = (status: string) => {
-    if (status === "all") return visibleTrips;
-    return visibleTrips.filter((t) => t.status === status);
+    if (status === "all") return trips;
+    return trips.filter((t) => t.status === status);
   };
 
   const formatDate = (date: string | null) => {
@@ -106,18 +100,10 @@ const Trips = () => {
               Manage and view all your family adventures
             </p>
           </div>
-          <div className="flex gap-2">
-            {visibleTrips.length >= 2 && (
-              <Button variant="outline" onClick={() => setCombineDialogOpen(true)}>
-                <Merge className="h-4 w-4 mr-2" />
-                Combine Trips
-              </Button>
-            )}
-            <Button onClick={() => navigate("/trips/new")}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Trip
-            </Button>
-          </div>
+          <Button onClick={() => navigate("/trips/new")}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Trip
+          </Button>
         </div>
 
         {/* Pending Invites */}
@@ -125,7 +111,7 @@ const Trips = () => {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
           <TabsList className="mb-6">
-            <TabsTrigger value="all">All ({visibleTrips.length})</TabsTrigger>
+            <TabsTrigger value="all">All ({trips.length})</TabsTrigger>
             <TabsTrigger value="planning">
               Planning ({filterTrips("planning").length})
             </TabsTrigger>
@@ -244,14 +230,6 @@ const Trips = () => {
             </TabsContent>
           ))}
         </Tabs>
-
-        {/* Combine Trips Dialog */}
-        <CombineTripsDialog
-          open={combineDialogOpen}
-          onOpenChange={setCombineDialogOpen}
-          trips={visibleTrips}
-          onSuccess={refetch}
-        />
       </div>
     </AppLayout>
   );

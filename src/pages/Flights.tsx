@@ -27,7 +27,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { scoreFlights, categorizeFlights, type ScoredFlight, type FlightResult, type PassengerBreakdown } from "@/lib/flightScoring";
 import { searchAirports, MAJOR_US_AIRLINES, INTERNATIONAL_AIRLINES, AIRLINES, type Airport } from "@/lib/airportsData";
-import { getAllCountries } from "@/lib/countriesData";
 import { runFlightAvoidanceSelfTest } from "@/lib/flightAvoidanceSelfTest";
 
 const DEPARTURE_TIMES = [{
@@ -294,13 +293,6 @@ const Flights = () => {
     setActiveLegTab(tripType === "multicity" ? "segment-1" : "outbound");
     clearResults();
   }, [tripType, clearResults]);
-
-  // Helper to get country name from code
-  const getCountryName = (code: string): string => {
-    const allCountries = getAllCountries();
-    const country = allCountries.find(c => c.code === code);
-    return country?.name || code;
-  };
 
   const handleOriginSearch = (value: string) => {
     setOrigin(value.toUpperCase());
@@ -823,23 +815,12 @@ const Flights = () => {
                         <Input placeholder="City or airport" className="pl-10" value={origin} onChange={e => handleOriginSearch(e.target.value)} onFocus={() => origin.length >= 2 && setShowOriginResults(true)} onBlur={() => setTimeout(() => setShowOriginResults(false), 200)} />
                       </div>
                       {showOriginResults && originResults.length > 0 && <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-auto">
-                          {originResults.map(a => {
-                            const countryName = getCountryName(a.country);
-                            return (
-                              <button key={a.code} className="w-full px-3 py-2 text-left hover:bg-muted text-sm" onClick={() => {
-                                setOrigin(a.code);
-                                setShowOriginResults(false);
-                              }}>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{a.code}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {a.city}{a.country === "US" && a.state ? `, ${a.state}` : ""}, {countryName}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">{a.name}</span>
-                                </div>
-                              </button>
-                            );
-                          })}
+                          {originResults.map(a => <button key={a.code} className="w-full px-3 py-2 text-left hover:bg-muted text-sm" onClick={() => {
+                            setOrigin(a.code);
+                            setShowOriginResults(false);
+                          }}>
+                              <span className="font-medium">{a.code}</span> - {a.city} ({a.name})
+                            </button>)}
                         </div>}
                     </div>
                     <div className="relative">
@@ -849,23 +830,12 @@ const Flights = () => {
                         <Input placeholder="City or airport" className="pl-10" value={destination} onChange={e => handleDestSearch(e.target.value)} onFocus={() => destination.length >= 2 && setShowDestResults(true)} onBlur={() => setTimeout(() => setShowDestResults(false), 200)} />
                       </div>
                       {showDestResults && destResults.length > 0 && <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-auto">
-                          {destResults.map(a => {
-                            const countryName = getCountryName(a.country);
-                            return (
-                              <button key={a.code} className="w-full px-3 py-2 text-left hover:bg-muted text-sm" onClick={() => {
-                                setDestination(a.code);
-                                setShowDestResults(false);
-                              }}>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{a.code}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {a.city}{a.country === "US" && a.state ? `, ${a.state}` : ""}, {countryName}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">{a.name}</span>
-                                </div>
-                              </button>
-                            );
-                          })}
+                          {destResults.map(a => <button key={a.code} className="w-full px-3 py-2 text-left hover:bg-muted text-sm" onClick={() => {
+                            setDestination(a.code);
+                            setShowDestResults(false);
+                          }}>
+                              <span className="font-medium">{a.code}</span> - {a.city} ({a.name})
+                            </button>)}
                         </div>}
                     </div>
                   </div>}
@@ -1116,7 +1086,6 @@ const Flights = () => {
                             canGoBack={index > 0}
                             onGoBack={() => handleGoBackToLeg(legId)}
                             nextLegLabel={nextLegLabel || undefined}
-                            preferNonstop={preferences.prefer_nonstop || stopsFilter === "nonstop"}
                           />
                         </TabsContent>
                       );
@@ -1132,33 +1101,32 @@ const Flights = () => {
                   
                   return (
                     <div key={legId} id={`leg-${legId}`}>
-                          <FlightLegResults
-                            legId={legId}
-                            legLabel={legInfo.label}
-                            origin={legInfo.origin}
-                            destination={legInfo.destination}
-                            date={legInfo.date}
-                            flights={result.flights}
-                            isLoading={result.isLoading}
-                            error={result.error}
-                            selectedFlightId={selectedForLeg?.flight.id || null}
-                            onSelectFlight={(flight) => handleSelectFlight(legId, legInfo.label, flight, legInfo.origin, legInfo.destination, legInfo.date)}
-                            onConfirmSelection={() => handleConfirmLeg(legId)}
-                            onRetry={() => retryLeg(legId, legInfo.origin, legInfo.destination, legInfo.date)}
-                            isAvoidedAirline={isAvoidedAirline}
-                            formatTime={formatTime}
-                            formatDate={formatDate}
-                            isLocked={false}
-                            lockedMessage=""
-                            passengers={passengers}
-                            isConfirmed={isConfirmed}
-                            canGoBack={false}
-                            nextLegLabel={undefined}
-                            tripType={tripType}
-                            onContinueToGoogle={() => handleContinueToGoogle()}
-                            onCopyChecklist={() => toast.success("Checklist copied to clipboard")}
-                            preferNonstop={preferences.prefer_nonstop || stopsFilter === "nonstop"}
-                          />
+                      <FlightLegResults
+                        legId={legId}
+                        legLabel={legInfo.label}
+                        origin={legInfo.origin}
+                        destination={legInfo.destination}
+                        date={legInfo.date}
+                        flights={result.flights}
+                        isLoading={result.isLoading}
+                        error={result.error}
+                        selectedFlightId={selectedForLeg?.flight.id || null}
+                        onSelectFlight={(flight) => handleSelectFlight(legId, legInfo.label, flight, legInfo.origin, legInfo.destination, legInfo.date)}
+                        onConfirmSelection={() => handleConfirmLeg(legId)}
+                        onRetry={() => retryLeg(legId, legInfo.origin, legInfo.destination, legInfo.date)}
+                        isAvoidedAirline={isAvoidedAirline}
+                        formatTime={formatTime}
+                        formatDate={formatDate}
+                        isLocked={false}
+                        lockedMessage=""
+                        passengers={passengers}
+                        isConfirmed={isConfirmed}
+                        canGoBack={false}
+                        nextLegLabel={undefined}
+                        tripType={tripType}
+                        onContinueToGoogle={() => handleContinueToGoogle()}
+                        onCopyChecklist={() => toast.success("Checklist copied to clipboard")}
+                      />
                     </div>
                   );
                 })}

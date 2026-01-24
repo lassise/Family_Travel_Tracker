@@ -60,42 +60,16 @@ const QuickAIPlanner = () => {
         },
       });
 
-      if (error) {
-        console.error("API error:", error);
-        // Try to parse error message for better user feedback
-        let errorMessage = "Failed to generate itinerary";
-        try {
-          if (error.message) {
-            const errorData = JSON.parse(error.message);
-            errorMessage = errorData.error || errorData.message || errorMessage;
-          }
-        } catch {
-          errorMessage = error.message || errorMessage;
-        }
-        toast({ 
-          title: errorMessage, 
-          variant: "destructive",
-          description: "Please try again or check your destination name"
-        });
-        return;
-      }
+      if (error) throw error;
 
-      if (data?.days && Array.isArray(data.days) && data.days.length > 0) {
+      if (data?.days) {
         setItinerary(data);
       } else {
-        toast({ 
-          title: "Could not generate itinerary", 
-          variant: "destructive",
-          description: "The AI couldn't create a valid itinerary. Please try a different destination or adjust your preferences."
-        });
+        toast({ title: "Could not generate itinerary", variant: "destructive" });
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error generating itinerary:", error);
-      toast({ 
-        title: "Failed to generate itinerary", 
-        variant: "destructive",
-        description: error?.message || "An unexpected error occurred. Please try again."
-      });
+      toast({ title: "Failed to generate itinerary", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -175,7 +149,7 @@ const QuickAIPlanner = () => {
 
             <Button
               onClick={generateItinerary}
-              disabled={loading || !destination.trim() || destination.trim().length < 2}
+              disabled={loading || !destination.trim()}
               className="w-full"
             >
               {loading ? (

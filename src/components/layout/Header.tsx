@@ -82,7 +82,7 @@ const Header = () => {
             <Plane className="w-5 h-5 text-primary-foreground" />
           </div>
           <span className="font-bold text-lg text-foreground">
-            Family Travel Tracker
+            Travel Tracker
           </span>
         </Link>
 
@@ -132,7 +132,7 @@ const Header = () => {
                   <div className="w-8 h-8 rounded-full bg-gradient-hero flex items-center justify-center">
                     <Plane className="w-4 h-4 text-primary-foreground" />
                   </div>
-                  <span>Family Travel Tracker</span>
+                  <span>Travel Tracker</span>
                 </SheetTitle>
               </SheetHeader>
 

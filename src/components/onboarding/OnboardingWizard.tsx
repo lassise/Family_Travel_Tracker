@@ -146,7 +146,7 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
             <Plane className="w-6 h-6 text-primary-foreground" />
           </div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            Family Travel Tracker
+            Travel Tracker
           </h1>
         </div>
 

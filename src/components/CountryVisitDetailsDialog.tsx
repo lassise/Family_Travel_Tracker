@@ -523,10 +523,6 @@ const CountryVisitDetailsDialog = ({
   const [newVisits, setNewVisits] = useState<NewVisitDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [expandedVisits, setExpandedVisits] = useState<Set<string>>(new Set());
-  const [pendingChanges, setPendingChanges] = useState<Record<string, Partial<VisitDetail>>>({});
-  const [pendingCityAdditions, setPendingCityAdditions] = useState<string[]>([]);
-  const [pendingCityDeletions, setPendingCityDeletions] = useState<string[]>([]);
-  const [pendingFamilyMemberChanges, setPendingFamilyMemberChanges] = useState<Record<string, string[]>>({});
   const { toast } = useToast();
 
   const cities = getCitiesForCountry(countryCode);
@@ -587,10 +583,6 @@ const CountryVisitDetailsDialog = ({
     if (open) {
       fetchData();
       setNewVisits([]);
-      setPendingChanges({});
-      setPendingCityAdditions([]);
-      setPendingCityDeletions([]);
-      setPendingFamilyMemberChanges({});
     }
   }, [open, fetchData]);
 
@@ -705,32 +697,42 @@ const CountryVisitDetailsDialog = ({
     }
   };
 
-  const handleToggleVisitFamilyMember = (visitId: string, memberId: string) => {
-    const originalMembers = visitFamilyMembers[visitId] || [];
-    const pendingMembers = pendingFamilyMemberChanges[visitId];
-    
-    // Get the current state (original + pending changes)
-    const currentMembers = pendingMembers !== undefined 
-      ? pendingMembers 
-      : originalMembers;
-    
+  const handleToggleVisitFamilyMember = async (visitId: string, memberId: string) => {
+    const currentMembers = visitFamilyMembers[visitId] || [];
     const isCurrentlySelected = currentMembers.includes(memberId);
 
-    // Update pending changes
-    setPendingFamilyMemberChanges((prev) => {
-      const currentPending = prev[visitId] !== undefined 
-        ? prev[visitId] 
-        : originalMembers;
-      
-      const newMembers = isCurrentlySelected
-        ? currentPending.filter((id) => id !== memberId)
-        : [...currentPending, memberId];
-      
-      return {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      if (isCurrentlySelected) {
+        // Remove the association
+        await supabase
+          .from("visit_family_members")
+          .delete()
+          .eq("visit_id", visitId)
+          .eq("family_member_id", memberId);
+      } else {
+        // Add the association
+        await supabase
+          .from("visit_family_members")
+          .insert({
+            visit_id: visitId,
+            family_member_id: memberId,
+            user_id: user.id,
+          });
+      }
+
+      // Update local state
+      setVisitFamilyMembers((prev) => ({
         ...prev,
-        [visitId]: newMembers,
-      };
-    });
+        [visitId]: isCurrentlySelected
+          ? currentMembers.filter((id) => id !== memberId)
+          : [...currentMembers, memberId],
+      }));
+    } catch (error) {
+      console.error("Error toggling family member:", error);
+    }
   };
 
   const handleUpdateVisit = async (
@@ -739,206 +741,36 @@ const CountryVisitDetailsDialog = ({
     value: string | number | null,
     currentVisit?: VisitDetail
   ) => {
-    // Store in pending changes instead of saving immediately
-    setPendingChanges(prev => {
-      const current = prev[visitId] || {};
-      const updated = { ...current, [field]: value };
+    let updateData: Record<string, string | number | null> = { [field]: value };
 
-      // Handle date calculations for pending changes
-      if (field === "visit_date" || field === "end_date") {
-        const visit = visitDetails.find(v => v.id === visitId) || currentVisit;
-        if (visit) {
-          const newStartDate = field === "visit_date" ? (value as string | null) : (current[field] as string | null) || visit.visit_date;
-          const newEndDate = field === "end_date" ? (value as string | null) : (current[field] as string | null) || visit.end_date;
+    if (currentVisit && (field === "visit_date" || field === "end_date")) {
+      const newStartDate = field === "visit_date" ? (value as string | null) : currentVisit.visit_date;
+      const newEndDate = field === "end_date" ? (value as string | null) : currentVisit.end_date;
 
-          if (newStartDate && newEndDate) {
-            const start = parseISO(newStartDate);
-            const end = parseISO(newEndDate);
-            if (isAfter(start, end)) {
-              toast({ title: "End date must be after start date", variant: "destructive" });
-              return prev;
-            }
-            const calculatedDays = calculateDays(newStartDate, newEndDate);
-            if (calculatedDays) {
-              updated.number_of_days = calculatedDays;
-            }
-          }
+      if (newStartDate && newEndDate) {
+        const start = parseISO(newStartDate);
+        const end = parseISO(newEndDate);
+        if (isAfter(start, end)) {
+          toast({ title: "End date must be after start date", variant: "destructive" });
+          return;
+        }
+        const calculatedDays = calculateDays(newStartDate, newEndDate);
+        if (calculatedDays) {
+          updateData.number_of_days = calculatedDays;
         }
       }
-
-      return { ...prev, [visitId]: updated };
-    });
-  };
-
-  const handleSaveVisitChanges = async (visitId: string) => {
-    const changes = pendingChanges[visitId];
-    if (!changes || Object.keys(changes).length === 0) return;
+    }
 
     const { error } = await supabase
       .from("country_visit_details")
-      .update(changes)
+      .update(updateData)
       .eq("id", visitId);
 
     if (error) {
       toast({ title: "Error updating visit", variant: "destructive" });
     } else {
-      setPendingChanges(prev => {
-        const updated = { ...prev };
-        delete updated[visitId];
-        return updated;
-      });
       fetchData();
-      toast({ title: "Visit updated successfully" });
     }
-  };
-
-  const handleCancelVisitChanges = (visitId: string) => {
-    setPendingChanges(prev => {
-      const updated = { ...prev };
-      delete updated[visitId];
-      return updated;
-    });
-  };
-
-  const handleSaveAllChanges = async () => {
-    setSaving(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({ title: "You must be logged in", variant: "destructive" });
-        setSaving(false);
-        return;
-      }
-
-      // Save all visit changes
-      for (const [visitId, changes] of Object.entries(pendingChanges)) {
-        if (Object.keys(changes).length > 0) {
-          const { error } = await supabase
-            .from("country_visit_details")
-            .update(changes)
-            .eq("id", visitId);
-
-          if (error) {
-            toast({ title: "Error updating visit", variant: "destructive" });
-            setSaving(false);
-            return;
-          }
-        }
-      }
-
-      // Save city additions
-      if (pendingCityAdditions.length > 0) {
-        const cityInserts = pendingCityAdditions.map((cityName) => ({
-          country_id: countryId,
-          city_name: cityName,
-          user_id: user.id,
-        }));
-
-        const { error: cityError } = await supabase
-          .from("city_visits")
-          .insert(cityInserts);
-
-        if (cityError) {
-          toast({ title: "Error adding cities", variant: "destructive" });
-          setSaving(false);
-          return;
-        }
-      }
-
-      // Save city deletions
-      if (pendingCityDeletions.length > 0) {
-        const { error: deleteError } = await supabase
-          .from("city_visits")
-          .delete()
-          .in("id", pendingCityDeletions);
-
-        if (deleteError) {
-          toast({ title: "Error deleting cities", variant: "destructive" });
-          setSaving(false);
-          return;
-        }
-      }
-
-      // Save family member changes
-      for (const [visitId, pendingMembers] of Object.entries(pendingFamilyMemberChanges)) {
-        const originalMembers = visitFamilyMembers[visitId] || [];
-        
-        // Find members to add and remove
-        const membersToAdd = pendingMembers.filter(id => !originalMembers.includes(id));
-        const membersToRemove = originalMembers.filter(id => !pendingMembers.includes(id));
-
-        // Remove members
-        if (membersToRemove.length > 0) {
-          const { error: removeError } = await supabase
-            .from("visit_family_members")
-            .delete()
-            .eq("visit_id", visitId)
-            .in("family_member_id", membersToRemove);
-
-          if (removeError) {
-            toast({ title: "Error updating family members", variant: "destructive" });
-            setSaving(false);
-            return;
-          }
-        }
-
-        // Add members
-        if (membersToAdd.length > 0) {
-          const familyInserts = membersToAdd.map((memberId) => ({
-            visit_id: visitId,
-            family_member_id: memberId,
-            user_id: user.id,
-          }));
-
-          const { error: addError } = await supabase
-            .from("visit_family_members")
-            .insert(familyInserts);
-
-          if (addError) {
-            toast({ title: "Error updating family members", variant: "destructive" });
-            setSaving(false);
-            return;
-          }
-        }
-      }
-
-      // Clear all pending changes
-      setPendingChanges({});
-      setPendingCityAdditions([]);
-      setPendingCityDeletions([]);
-      setPendingFamilyMemberChanges({});
-      
-      fetchData();
-      toast({ title: "All changes saved successfully" });
-    } catch (error) {
-      console.error("Error saving changes:", error);
-      toast({ title: "Error saving changes", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancelAllChanges = () => {
-    setPendingChanges({});
-    setPendingCityAdditions([]);
-    setPendingCityDeletions([]);
-    setPendingFamilyMemberChanges({});
-  };
-
-  const hasAnyPendingChanges = () => {
-    const hasVisitChanges = Object.values(pendingChanges).some(
-      changes => changes && Object.keys(changes).length > 0
-    );
-    const hasCityChanges = pendingCityAdditions.length > 0 || pendingCityDeletions.length > 0;
-    const hasFamilyMemberChanges = Object.keys(pendingFamilyMemberChanges).some(visitId => {
-      const originalMembers = visitFamilyMembers[visitId] || [];
-      const pendingMembers = pendingFamilyMemberChanges[visitId] || [];
-      // Check if arrays are different
-      if (originalMembers.length !== pendingMembers.length) return true;
-      return !originalMembers.every(id => pendingMembers.includes(id)) ||
-             !pendingMembers.every(id => originalMembers.includes(id));
-    });
-    return hasVisitChanges || hasCityChanges || hasFamilyMemberChanges;
   };
 
   const handleDeleteVisit = async (visitId: string) => {
@@ -954,46 +786,44 @@ const CountryVisitDetailsDialog = ({
     }
   };
 
-  const handleAddCity = (cityName: string) => {
+  const handleAddCity = async (cityName: string) => {
     if (!cityName.trim()) return;
 
-    const trimmedCity = cityName.trim();
-    const cityLower = trimmedCity.toLowerCase();
-
-    // Check if already in existing cities
     const existingCity = cityVisits.find(
-      (c) => c.city_name.toLowerCase() === cityLower
+      (c) => c.city_name.toLowerCase() === cityName.toLowerCase()
     );
     if (existingCity) {
       toast({ title: "City already added", variant: "destructive" });
       return;
     }
 
-    // Check if already in pending additions
-    if (pendingCityAdditions.some(c => c.toLowerCase() === cityLower)) {
-      toast({ title: "City already queued to be added", variant: "destructive" });
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast({ title: "You must be logged in", variant: "destructive" });
       return;
     }
 
-    // Remove from pending deletions if it was there
-    setPendingCityDeletions(prev => prev.filter(id => {
-      const city = cityVisits.find(c => c.id === id);
-      return !city || city.city_name.toLowerCase() !== cityLower;
-    }));
+    const { error } = await supabase.from("city_visits").insert({
+      country_id: countryId,
+      city_name: cityName.trim(),
+      user_id: user.id,
+    });
 
-    // Add to pending additions
-    setPendingCityAdditions(prev => [...prev, trimmedCity]);
+    if (error) {
+      toast({ title: "Error adding city", variant: "destructive" });
+    } else {
+      fetchData();
+    }
   };
 
-  const handleDeleteCity = (cityId: string) => {
-    const city = cityVisits.find(c => c.id === cityId);
-    if (!city) return;
+  const handleDeleteCity = async (cityId: string) => {
+    const { error } = await supabase.from("city_visits").delete().eq("id", cityId);
 
-    // Remove from pending additions if it was there
-    setPendingCityAdditions(prev => prev.filter(c => c.toLowerCase() !== city.city_name.toLowerCase()));
-
-    // Add to pending deletions
-    setPendingCityDeletions(prev => [...prev, cityId]);
+    if (error) {
+      toast({ title: "Error deleting city", variant: "destructive" });
+    } else {
+      fetchData();
+    }
   };
 
   const totalDays = visitDetails.reduce((sum, v) => sum + (v.number_of_days || 0), 0);
@@ -1099,15 +929,11 @@ const CountryVisitDetailsDialog = ({
                   {visitDetails.map((visit, index) => {
                     const isExpanded = expandedVisits.has(visit.id);
 
-                    // Get pending changes for this visit
-                    const pending = pendingChanges[visit.id] || {};
-                    const displayVisit = { ...visit, ...pending };
-                    
-                    const hasDateRange = (displayVisit.visit_date as string | null) && (displayVisit.end_date as string | null);
-                    const isAutoCalculated = hasDateRange && calculateDays(displayVisit.visit_date as string | null, displayVisit.end_date as string | null) !== null;
-                    const isApproximate = (displayVisit.is_approximate as boolean | undefined) ?? (visit.is_approximate || false);
+                    const hasDateRange = visit.visit_date && visit.end_date;
+                    const isAutoCalculated = hasDateRange && calculateDays(visit.visit_date, visit.end_date) !== null;
+                    const isApproximate = visit.is_approximate || false;
 
-                    const handleVisitDateSave = (startDate: string | null, endDate: string | null) => {
+                    const handleVisitDateSave = async (startDate: string | null, endDate: string | null) => {
                       let updateData: Record<string, string | number | null | boolean> = {
                         visit_date: startDate,
                         end_date: endDate,
@@ -1123,14 +949,19 @@ const CountryVisitDetailsDialog = ({
                         }
                       }
 
-                      // Store in pending changes instead of saving immediately
-                      setPendingChanges(prev => ({
-                        ...prev,
-                        [visit.id]: { ...prev[visit.id], ...updateData }
-                      }));
+                      const { error } = await supabase
+                        .from("country_visit_details")
+                        .update(updateData)
+                        .eq("id", visit.id);
+
+                      if (error) {
+                        toast({ title: "Error updating dates", variant: "destructive" });
+                      } else {
+                        fetchData();
+                      }
                     };
 
-                    const handleApproximateToggle = (checked: boolean) => {
+                    const handleApproximateToggle = async (checked: boolean) => {
                       const updateData: Record<string, string | number | null | boolean> = {
                         is_approximate: checked,
                       };
@@ -1143,19 +974,29 @@ const CountryVisitDetailsDialog = ({
                         updateData.approximate_year = null;
                       }
 
-                      // Store in pending changes instead of saving immediately
-                      setPendingChanges(prev => ({
-                        ...prev,
-                        [visit.id]: { ...prev[visit.id], ...updateData }
-                      }));
+                      const { error } = await supabase
+                        .from("country_visit_details")
+                        .update(updateData)
+                        .eq("id", visit.id);
+
+                      if (error) {
+                        toast({ title: "Error updating visit", variant: "destructive" });
+                      } else {
+                        fetchData();
+                      }
                     };
 
-                    const handleApproximateUpdate = (field: string, value: number | string | null) => {
-                      // Store in pending changes instead of saving immediately
-                      setPendingChanges(prev => ({
-                        ...prev,
-                        [visit.id]: { ...prev[visit.id], [field]: value }
-                      }));
+                    const handleApproximateUpdate = async (field: string, value: number | string | null) => {
+                      const { error } = await supabase
+                        .from("country_visit_details")
+                        .update({ [field]: value })
+                        .eq("id", visit.id);
+
+                      if (error) {
+                        toast({ title: "Error updating visit", variant: "destructive" });
+                      } else {
+                        fetchData();
+                      }
                     };
 
                     const months = [
@@ -1177,19 +1018,17 @@ const CountryVisitDetailsDialog = ({
                     const years = Array.from({ length: 50 }, (_, i) => currentYear - i);
 
                     // Build a display title for the visit
-                    let visitTitle = (displayVisit.trip_name as string | null) || `Visit #${visitDetails.length - index}`;
+                    let visitTitle = visit.trip_name || `Visit #${visitDetails.length - index}`;
                     let visitSubtitle = "";
-                    const displayIsApproximate = (displayVisit.is_approximate as boolean | undefined) ?? isApproximate;
-                    if (displayIsApproximate) {
-                      const monthName = months.find((m) => m.value === (displayVisit.approximate_month as number | null | undefined))?.label;
-                      visitSubtitle = [monthName, displayVisit.approximate_year].filter(Boolean).join(" ") || "Date unknown";
-                    } else if (displayVisit.visit_date) {
-                      visitSubtitle = displayVisit.end_date
-                        ? `${format(parseISO(displayVisit.visit_date as string), "MMM d")} - ${format(parseISO(displayVisit.end_date as string), "MMM d, yyyy")}`
-                        : format(parseISO(displayVisit.visit_date as string), "MMM d, yyyy");
+                    if (isApproximate) {
+                      const monthName = months.find((m) => m.value === visit.approximate_month)?.label;
+                      visitSubtitle = [monthName, visit.approximate_year].filter(Boolean).join(" ") || "Date unknown";
+                    } else if (visit.visit_date) {
+                      visitSubtitle = visit.end_date
+                        ? `${format(parseISO(visit.visit_date), "MMM d")} - ${format(parseISO(visit.end_date), "MMM d, yyyy")}`
+                        : format(parseISO(visit.visit_date), "MMM d, yyyy");
                     }
-                    const displayDays = (displayVisit.number_of_days as number | null | undefined) ?? visit.number_of_days;
-                    visitSubtitle += ` • ${displayDays} day${displayDays !== 1 ? "s" : ""}`;
+                    visitSubtitle += ` • ${visit.number_of_days} day${visit.number_of_days !== 1 ? "s" : ""}`;
 
                     return (
                       <Collapsible key={visit.id} open={isExpanded} onOpenChange={() => toggleVisitExpanded(visit.id)}>
@@ -1230,7 +1069,7 @@ const CountryVisitDetailsDialog = ({
                                     Approximate dates
                                   </Label>
                                   <Switch
-                                    checked={(pendingChanges[visit.id]?.is_approximate as boolean | undefined) ?? displayIsApproximate}
+                                    checked={isApproximate}
                                     onCheckedChange={handleApproximateToggle}
                                     className="scale-75"
                                   />
@@ -1239,21 +1078,13 @@ const CountryVisitDetailsDialog = ({
                                 {/* Trip Name */}
                                 <div>
                                   <Label className="text-xs mb-1 block">Trip Name</Label>
-                                  <Input
-                                    type="text"
-                                    placeholder="e.g., Trip with In-laws"
-                                    value={(pendingChanges[visit.id]?.trip_name as string | undefined) ?? visit.trip_name ?? ""}
-                                    onChange={(e) => {
-                                      setPendingChanges(prev => ({
-                                        ...prev,
-                                        [visit.id]: { ...prev[visit.id], trip_name: e.target.value || null }
-                                      }));
-                                    }}
-                                    className="h-8 text-sm"
+                                  <TripNameInput
+                                    initialValue={visit.trip_name || ""}
+                                    onSave={(value) => handleUpdateVisit(visit.id, "trip_name", value || null)}
                                   />
                                 </div>
 
-                                {displayIsApproximate ? (
+                                {isApproximate ? (
                                   <div>
                                     <Label className="text-xs mb-1 block flex items-center gap-1">
                                       <CalendarDays className="w-3 h-3" />
@@ -1261,7 +1092,7 @@ const CountryVisitDetailsDialog = ({
                                     </Label>
                                     <div className="flex gap-2">
                                       <Select
-                                        value={((pendingChanges[visit.id]?.approximate_month as number | null | undefined) ?? visit.approximate_month)?.toString() || ""}
+                                        value={visit.approximate_month?.toString() || ""}
                                         onValueChange={(value) =>
                                           handleApproximateUpdate("approximate_month", value ? parseInt(value) : null)
                                         }
@@ -1278,7 +1109,7 @@ const CountryVisitDetailsDialog = ({
                                         </SelectContent>
                                       </Select>
                                       <Select
-                                        value={((pendingChanges[visit.id]?.approximate_year as number | null | undefined) ?? visit.approximate_year)?.toString() || ""}
+                                        value={visit.approximate_year?.toString() || ""}
                                         onValueChange={(value) =>
                                           handleApproximateUpdate("approximate_year", value ? parseInt(value) : null)
                                         }
@@ -1300,8 +1131,8 @@ const CountryVisitDetailsDialog = ({
                                   <div>
                                     <Label className="text-xs mb-1 block">Travel Dates</Label>
                                     <TravelDatePicker
-                                      startDate={(pendingChanges[visit.id]?.visit_date as string | null | undefined) ?? visit.visit_date}
-                                      endDate={(pendingChanges[visit.id]?.end_date as string | null | undefined) ?? visit.end_date}
+                                      startDate={visit.visit_date}
+                                      endDate={visit.end_date}
                                       onSave={handleVisitDateSave}
                                     />
                                   </div>
@@ -1310,7 +1141,7 @@ const CountryVisitDetailsDialog = ({
                                 <div>
                                   <div className="flex items-center justify-between mb-1">
                                     <Label className="text-xs">Days</Label>
-                                    {!displayIsApproximate && isAutoCalculated ? (
+                                    {!isApproximate && isAutoCalculated ? (
                                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                                         <Calendar className="w-3 h-3" />
                                         Auto-calculated
@@ -1322,24 +1153,10 @@ const CountryVisitDetailsDialog = ({
                                       </span>
                                     )}
                                   </div>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    value={(pendingChanges[visit.id]?.number_of_days as number | undefined) ?? visit.number_of_days ?? ""}
-                                    onChange={(e) => {
-                                      const value = e.target.value;
-                                      const numValue = parseInt(value);
-                                      setPendingChanges(prev => ({
-                                        ...prev,
-                                        [visit.id]: { 
-                                          ...prev[visit.id], 
-                                          number_of_days: value === "" ? null : (isNaN(numValue) ? null : numValue)
-                                        }
-                                      }));
-                                    }}
-                                    disabled={!displayIsApproximate && isAutoCalculated && !pendingChanges[visit.id]?.number_of_days}
-                                    className="h-8 text-sm"
-                                    placeholder="Enter days"
+                                  <DaysInput
+                                    initialValue={visit.number_of_days}
+                                    disabled={!isApproximate && isAutoCalculated}
+                                    onSave={(value) => handleUpdateVisit(visit.id, "number_of_days", value)}
                                   />
                                 </div>
 
@@ -1351,28 +1168,19 @@ const CountryVisitDetailsDialog = ({
                                       Who went on this trip? (optional)
                                     </Label>
                                     <div className="flex flex-wrap gap-2">
-                                      {familyMembers.map((member) => {
-                                        const originalMembers = visitFamilyMembers[visit.id] || [];
-                                        const pendingMembers = pendingFamilyMemberChanges[visit.id];
-                                        const currentMembers = pendingMembers !== undefined 
-                                          ? pendingMembers 
-                                          : originalMembers;
-                                        const isChecked = currentMembers.includes(member.id);
-                                        
-                                        return (
-                                          <label
-                                            key={member.id}
-                                            className="flex items-center gap-1.5 text-xs cursor-pointer"
-                                          >
-                                            <Checkbox
-                                              checked={isChecked}
-                                              onCheckedChange={() => handleToggleVisitFamilyMember(visit.id, member.id)}
-                                            />
-                                            <span>{member.avatar}</span>
-                                            <span>{member.name}</span>
-                                          </label>
-                                        );
-                                      })}
+                                      {familyMembers.map((member) => (
+                                        <label
+                                          key={member.id}
+                                          className="flex items-center gap-1.5 text-xs cursor-pointer"
+                                        >
+                                          <Checkbox
+                                            checked={(visitFamilyMembers[visit.id] || []).includes(member.id)}
+                                            onCheckedChange={() => handleToggleVisitFamilyMember(visit.id, member.id)}
+                                          />
+                                          <span>{member.avatar}</span>
+                                          <span>{member.name}</span>
+                                        </label>
+                                      ))}
                                     </div>
                                   </div>
                                 )}
@@ -1444,42 +1252,20 @@ const CountryVisitDetailsDialog = ({
                 </Popover>
               </div>
 
-              {cityVisits.length === 0 && pendingCityAdditions.length === 0 ? (
+              {cityVisits.length === 0 ? (
                 <p className="text-muted-foreground text-sm">No cities recorded yet.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {/* Show existing cities that aren't pending deletion */}
-                  {cityVisits
-                    .filter(city => !pendingCityDeletions.includes(city.id))
-                    .map((city) => (
-                      <Badge
-                        key={city.id}
-                        variant="secondary"
-                        className="text-sm py-1 px-3 flex items-center gap-1"
-                      >
-                        <MapPin className="w-3 h-3" />
-                        {city.city_name}
-                        <button
-                          onClick={() => handleDeleteCity(city.id)}
-                          className="ml-1 hover:text-destructive"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  {/* Show pending additions */}
-                  {pendingCityAdditions.map((cityName) => (
+                  {cityVisits.map((city) => (
                     <Badge
-                      key={`pending-${cityName}`}
-                      variant="outline"
-                      className="text-sm py-1 px-3 flex items-center gap-1 border-primary text-primary"
+                      key={city.id}
+                      variant="secondary"
+                      className="text-sm py-1 px-3 flex items-center gap-1"
                     >
                       <MapPin className="w-3 h-3" />
-                      {cityName}
+                      {city.city_name}
                       <button
-                        onClick={() => {
-                          setPendingCityAdditions(prev => prev.filter(c => c !== cityName));
-                        }}
+                        onClick={() => handleDeleteCity(city.id)}
                         className="ml-1 hover:text-destructive"
                       >
                         <X className="w-3 h-3" />
@@ -1488,25 +1274,6 @@ const CountryVisitDetailsDialog = ({
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Save/Cancel Buttons */}
-            <div className="flex items-center justify-end gap-2 pt-4 border-t mt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCancelAllChanges}
-                disabled={!hasAnyPendingChanges()}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSaveAllChanges}
-                disabled={!hasAnyPendingChanges() || saving}
-              >
-                {saving ? "Saving..." : "Save Changes"}
-              </Button>
             </div>
           </div>
         </ScrollArea>

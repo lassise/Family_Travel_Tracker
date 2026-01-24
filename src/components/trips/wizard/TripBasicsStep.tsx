@@ -3,8 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { TripFormData } from "../TripWizard";
-import { MapPin, Calendar, Hotel, Users, Briefcase, Palmtree, ArrowRightLeft, Globe } from "lucide-react";
-import { CountryMultiSelect } from "../CountryMultiSelect";
+import { MapPin, Calendar, Hotel, Users, Briefcase, Palmtree, ArrowRightLeft } from "lucide-react";
 
 interface TripBasicsStepProps {
   formData: TripFormData;
@@ -18,36 +17,16 @@ const PURPOSE_OPTIONS = [
 ];
 
 export const TripBasicsStep = ({ formData, updateFormData }: TripBasicsStepProps) => {
-  const isMultiCountry = formData.countries.length > 1;
-  
   return (
     <div className="space-y-6">
-      {/* Multi-country selection */}
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <Globe className="h-4 w-4" />
-          Countries in this trip
-        </Label>
-        <CountryMultiSelect
-          value={formData.countries}
-          onChange={(countries) => updateFormData({ countries })}
-          placeholder="Select one or more countries..."
-        />
-        {isMultiCountry && (
-          <p className="text-xs text-muted-foreground">
-            🌍 Multi-country trip! This will count as one trip visiting {formData.countries.length} countries.
-          </p>
-        )}
-      </div>
-
       <div className="space-y-2">
         <Label htmlFor="destination" className="flex items-center gap-2">
           <MapPin className="h-4 w-4" />
-          {isMultiCountry ? "Primary destination or trip name" : "Where are you going?"}
+          Where are you going?
         </Label>
         <Input
           id="destination"
-          placeholder={isMultiCountry ? "e.g., Mediterranean Cruise" : "e.g., Paris, France or Disney World, Orlando"}
+          placeholder="e.g., Paris, France or Disney World, Orlando"
           value={formData.destination}
           onChange={(e) => updateFormData({ destination: e.target.value })}
         />
@@ -96,13 +75,7 @@ export const TripBasicsStep = ({ formData, updateFormData }: TripBasicsStepProps
           <Switch
             id="hasDates"
             checked={formData.hasDates}
-            onCheckedChange={(checked) => {
-              updateFormData({ 
-                hasDates: checked,
-                // Clear dates if user unchecks
-                ...(checked ? {} : { startDate: "", endDate: "" })
-              });
-            }}
+            onCheckedChange={(checked) => updateFormData({ hasDates: checked })}
           />
         </div>
 
@@ -157,24 +130,9 @@ export const TripBasicsStep = ({ formData, updateFormData }: TripBasicsStepProps
               id="endDate"
               type="date"
               value={formData.endDate}
-              min={formData.startDate || undefined}
-              onChange={(e) => {
-                const endDate = e.target.value;
-                // Validate end date is after start date
-                if (formData.startDate && endDate) {
-                  const start = new Date(formData.startDate);
-                  const end = new Date(endDate);
-                  if (end <= start) {
-                    // Don't update if invalid, or show error
-                    return;
-                  }
-                }
-                updateFormData({ endDate });
-              }}
+              min={formData.startDate}
+              onChange={(e) => updateFormData({ endDate: e.target.value })}
             />
-            {formData.startDate && formData.endDate && new Date(formData.endDate) <= new Date(formData.startDate) && (
-              <p className="text-xs text-destructive">End date must be after start date</p>
-            )}
           </div>
         </div>
       )}

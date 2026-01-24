@@ -37,17 +37,12 @@ export function PlannerModeStep({
   const addKidAge = () => {
     const age = parseInt(newAge);
     if (!isNaN(age) && age >= 0 && age <= 18) {
-      // Prevent duplicate ages
-      if (!clientInfo.kidsAges.includes(age)) {
-        onClientInfoChange({
-          ...clientInfo,
-          numKids: clientInfo.kidsAges.length + 1,
-          kidsAges: [...clientInfo.kidsAges, age],
-        });
-        setNewAge("");
-      } else {
-        setNewAge("");
-      }
+      onClientInfoChange({
+        ...clientInfo,
+        numKids: clientInfo.numKids + 1,
+        kidsAges: [...clientInfo.kidsAges, age],
+      });
+      setNewAge("");
     }
   };
 
@@ -55,7 +50,7 @@ export function PlannerModeStep({
     const newAges = clientInfo.kidsAges.filter((_, i) => i !== index);
     onClientInfoChange({
       ...clientInfo,
-      numKids: newAges.length,
+      numKids: Math.max(0, clientInfo.numKids - 1),
       kidsAges: newAges,
     });
   };

@@ -15,12 +15,10 @@ import { ReviewStep } from "./wizard/ReviewStep";
 import { PlannerModeStep, type ClientInfo } from "./wizard/PlannerModeStep";
 import { ContextStep } from "./wizard/ContextStep";
 import { useTravelProfiles } from "@/hooks/useTravelProfiles";
-import type { SelectedCountry } from "./CountryMultiSelect";
 
 export interface TripFormData {
   title: string;
   destination: string;
-  countries: SelectedCountry[]; // NEW: for multi-country trips
   startDate: string;
   endDate: string;
   hasDates: boolean;
@@ -65,7 +63,6 @@ const TripWizard = () => {
   const [formData, setFormData] = useState<TripFormData>({
     title: "",
     destination: "",
-    countries: [], // NEW: for multi-country trips
     startDate: "",
     endDate: "",
     hasDates: true,
@@ -109,16 +106,8 @@ const TripWizard = () => {
         return true;
       case 2:
         // Destination required, dates only if they said they have them
-        if (!formData.destination.trim()) return false;
-        if (formData.hasDates) {
-          if (!formData.startDate || !formData.endDate) return false;
-          // Validate end date is after start date
-          if (formData.startDate && formData.endDate) {
-            const start = new Date(formData.startDate);
-            const end = new Date(formData.endDate);
-            if (end <= start) return false;
-          }
-        }
+        if (!formData.destination) return false;
+        if (formData.hasDates && (!formData.startDate || !formData.endDate)) return false;
         return true;
       case 3:
         // Kids ages only required if traveling with kids
@@ -137,7 +126,7 @@ const TripWizard = () => {
   };
 
   const handleNext = () => {
-    if (currentStep < STEPS.length && canProceed()) {
+    if (currentStep < STEPS.length) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -170,22 +159,15 @@ const TripWizard = () => {
         : activeProfile;
       
       // First create the trip in the database
-      // For multi-country trips, set destination as the route
-      const isMultiCountry = formData.countries.length > 1;
-      const tripDestination = isMultiCountry 
-        ? formData.countries.map(c => c.name).join(" → ")
-        : formData.destination;
-      
       const { data: trip, error: tripError } = await createTrip({
         title: tripTitle,
-        destination: tripDestination,
+        destination: formData.destination,
         start_date: formData.startDate,
         end_date: formData.endDate,
         kids_ages: effectiveKidsAges,
         interests: formData.interests,
         pace_preference: formData.pacePreference,
         status: 'planning',
-        trip_type: isMultiCountry ? 'multi-country' : undefined,
         has_lodging_booked: formData.hasLodging,
         provider_preferences: formData.providerPreferences,
         needs_wheelchair_access: formData.needsWheelchairAccess,
@@ -194,24 +176,6 @@ const TripWizard = () => {
 
       if (tripError || !trip) {
         throw new Error(tripError?.message || 'Failed to create trip');
-      }
-
-      // If multi-country, insert trip_countries records
-      if (formData.countries.length > 0) {
-        const countryRecords = formData.countries.map((country, index) => ({
-          trip_id: trip.id,
-          country_code: country.code,
-          country_name: country.name,
-          order_index: index,
-        }));
-
-        const { error: countriesError } = await supabase
-          .from("trip_countries")
-          .insert(countryRecords);
-
-        if (countriesError) {
-          console.error("Error inserting trip countries:", countriesError);
-        }
       }
 
       toast.info("Generating your personalized itinerary...");
@@ -254,18 +218,8 @@ const TripWizard = () => {
 
       if (itineraryError) {
         // Handle specific error codes with user-friendly messages
-        let errorData: any = {};
-        let errorCode: string | undefined;
-        
-        try {
-          if (itineraryError.message) {
-            errorData = JSON.parse(itineraryError.message);
-            errorCode = errorData.code;
-          }
-        } catch {
-          // If parsing fails, treat as generic error
-          errorData = { error: itineraryError.message || 'Unknown error' };
-        }
+        const errorData = itineraryError.message ? JSON.parse(itineraryError.message) : {};
+        const errorCode = errorData.code;
         
         switch (errorCode) {
           case 'RATE_LIMITED':
@@ -279,9 +233,9 @@ const TripWizard = () => {
             toast.error("Please check your trip details: " + (errorData.details?.[0] || "Invalid input"));
             break;
           default:
-            toast.error(errorData.error || itineraryError.message || "Failed to generate itinerary. Please try again.");
+            toast.error(errorData.error || "Failed to generate itinerary. Please try again.");
         }
-        throw new Error(errorData.error || itineraryError.message || 'Generation failed');
+        throw new Error(errorData.error || 'Generation failed');
       }
 
       const { itinerary, meta } = itineraryData;
