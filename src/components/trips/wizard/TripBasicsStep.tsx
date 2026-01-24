@@ -3,7 +3,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { TripFormData } from "../TripWizard";
-import { MapPin, Calendar, Hotel, Users, Briefcase, Palmtree, ArrowRightLeft } from "lucide-react";
+import { MapPin, Calendar, Hotel, Users, Briefcase, Palmtree, ArrowRightLeft, Globe } from "lucide-react";
+import { CountryMultiSelect } from "../CountryMultiSelect";
 
 interface TripBasicsStepProps {
   formData: TripFormData;
@@ -17,16 +18,36 @@ const PURPOSE_OPTIONS = [
 ];
 
 export const TripBasicsStep = ({ formData, updateFormData }: TripBasicsStepProps) => {
+  const isMultiCountry = formData.countries.length > 1;
+  
   return (
     <div className="space-y-6">
+      {/* Multi-country selection */}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2">
+          <Globe className="h-4 w-4" />
+          Countries in this trip
+        </Label>
+        <CountryMultiSelect
+          value={formData.countries}
+          onChange={(countries) => updateFormData({ countries })}
+          placeholder="Select one or more countries..."
+        />
+        {isMultiCountry && (
+          <p className="text-xs text-muted-foreground">
+            🌍 Multi-country trip! This will count as one trip visiting {formData.countries.length} countries.
+          </p>
+        )}
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="destination" className="flex items-center gap-2">
           <MapPin className="h-4 w-4" />
-          Where are you going?
+          {isMultiCountry ? "Primary destination or trip name" : "Where are you going?"}
         </Label>
         <Input
           id="destination"
-          placeholder="e.g., Paris, France or Disney World, Orlando"
+          placeholder={isMultiCountry ? "e.g., Mediterranean Cruise" : "e.g., Paris, France or Disney World, Orlando"}
           value={formData.destination}
           onChange={(e) => updateFormData({ destination: e.target.value })}
         />
