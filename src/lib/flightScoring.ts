@@ -39,6 +39,7 @@ export interface FlightResult {
   isAlternateOrigin?: boolean;
   minSavingsRequired?: number;
   layovers?: LayoverInfo[];
+  totalDuration?: number; // Total duration in minutes including all segments and layovers
 }
 
 export interface PreferenceMatch {
