@@ -3,10 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { CheckCircle2, Trash2, Calendar, MapPin, Clock, ChevronDown } from "lucide-react";
+import { CheckCircle2, Trash2, Calendar, MapPin, Clock, ChevronDown, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import CountryDialog from "./CountryDialog";
+import AddCountryModal from "./countries/AddCountryModal";
 import CountryVisitDetailsDialog from "./CountryVisitDetailsDialog";
 import { Country } from "@/hooks/useFamilyData";
 import { useVisitDetails } from "@/hooks/useVisitDetails";
@@ -35,6 +35,7 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
     countryName: ''
   });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [addCountryModalOpen, setAddCountryModalOpen] = useState(false);
 
   // Get unique continents and years from countries
   const { continents, years } = useMemo(() => {
@@ -175,7 +176,16 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto mb-4">
             Our family's travel journey across the world
           </p>
-          <CountryDialog familyMembers={familyMembers} onSuccess={handleUpdate} />
+          <Button onClick={() => setAddCountryModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Country
+          </Button>
+          <AddCountryModal
+            open={addCountryModalOpen}
+            onOpenChange={setAddCountryModalOpen}
+            familyMembers={familyMembers}
+            onSuccess={handleUpdate}
+          />
         </div>
 
         {/* Filters */}
