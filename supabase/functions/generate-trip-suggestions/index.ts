@@ -158,14 +158,87 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { request_type, preferences, visited_countries, wishlistCountries, visitedContinents, visitedCountries } = body;
+    const { request_type, preferences, visited_countries, wishlistCountries, visitedContinents, visitedCountries, discovery_answers } = body;
 
     // Validate request_type
-    const validRequestTypes = ['recommendations', 'quick_itinerary', 'suggestions', undefined];
+    const validRequestTypes = ['recommendations', 'quick_itinerary', 'suggestions', 'discover_destinations', undefined];
     if (request_type && !validRequestTypes.includes(request_type)) {
       return new Response(
         JSON.stringify({ error: 'Invalid request_type', suggestions: [], recommendations: [] }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Handle discovery-based destination recommendations
+    if (request_type === "discover_destinations") {
+      const answers = discovery_answers || {};
+      
+      const prompt = `Based on this traveler's discovery answers, recommend exactly 3 destinations they should visit.
+
+Discovery Answers:
+- Trip Purpose: ${answers.tripPurpose || 'Not specified'} (escape=relaxation, explore=new places, experience=specific activity, family=quality time)
+- Trip Types Interested In: ${answers.tripType?.join(', ') || 'general'}
+- Destination Flexibility: ${answers.flexibility || 50}% (0=specific place in mind, 100=completely open)
+- Travel Distance Willingness: ${answers.travelDistance || 'moderate'} (short=under 4h flight, moderate=4-8h, anywhere=global)
+- Traveling with Kids: ${answers.travelingWithKids ? 'Yes' : 'No'}
+${answers.travelingWithKids && answers.kidsAges?.length ? `- Kids Ages: ${answers.kidsAges.join(', ')}` : ''}
+- Preferred Pace: ${answers.pace || 'moderate'}
+- Budget Level: ${answers.budget || 'moderate'}
+
+Additional Context:
+- Countries Already Visited: ${visited_countries?.join(', ') || 'None yet'}
+- Existing Travel Style Preferences: ${preferences?.travel_style?.join(', ') || 'Not specified'}
+- Existing Interests: ${preferences?.interests?.join(', ') || 'Not specified'}
+
+IMPORTANT RULES:
+1. Do NOT recommend countries they have already visited
+2. If traveling with young kids (under 5), prioritize family-friendly, easy-to-navigate destinations
+3. Match recommendations to their budget level and pace preference
+4. Consider flight distance based on their willingness to travel
+5. Give SPECIFIC destinations (cities/regions), not just country names
+
+Return a JSON object with a "recommendations" array containing exactly 3 objects:
+- destination: specific city or region name (e.g., "Barcelona" not just "Spain")
+- country: country name
+- matchScore: number from 75-98 showing how well it matches their answers
+- reason: 2-3 sentence personalized explanation referencing their specific answers
+- highlights: array of 4 specific things they'd enjoy based on their trip type preferences
+- bestTimeToVisit: specific months or season recommendation
+
+Return ONLY valid JSON, no markdown or explanation.`;
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: "You are an expert travel advisor who creates highly personalized destination recommendations. Consider family dynamics, kids' needs, and traveler preferences carefully. Always respond with valid JSON only." },
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.8,
+        }),
+      });
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || '{}';
+      
+      let result;
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        result = jsonMatch ? JSON.parse(jsonMatch[0]) : { recommendations: [] };
+      } catch {
+        result = { recommendations: [] };
+      }
+
+      console.log('Discovery recommendations generated:', result.recommendations?.length || 0);
+
+      return new Response(
+        JSON.stringify(result),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
