@@ -27,7 +27,8 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   const [isSoloTraveler, setIsSoloTraveler] = useState(false);
   const [userName, setUserName] = useState<string>("");
 
-  // Build steps: Countries → Preferences → Family members (new order)
+  // Build steps: Name → Home → Family members → Countries → Preferences (fixed order)
+  // Family members MUST come before countries so we can associate visits
   const steps = [
     {
       title: "Welcome to Your Travel Companion!",
@@ -52,6 +53,18 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
       ),
     },
     {
+      title: "Who's Traveling?",
+      description: "Add yourself first, then add anyone else you'd like to track travels for.",
+      icon: Users,
+      component: (
+        <FamilyMembersStep 
+          onMembersChange={setFamilyMembers}
+          onSoloMode={setIsSoloTraveler}
+          suggestedName={userName}
+        />
+      ),
+    },
+    {
       title: "Countries You've Visited",
       description: "Add countries you've already explored. You can add details later.",
       icon: Globe,
@@ -66,18 +79,6 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
       description: "Help us personalize your experience with a few quick questions.",
       icon: Heart,
       component: <TravelPreferencesStep />,
-    },
-    {
-      title: "Who's Traveling?",
-      description: "Add yourself first, then add anyone else you'd like to track travels for.",
-      icon: Users,
-      component: (
-        <FamilyMembersStep 
-          onMembersChange={setFamilyMembers}
-          onSoloMode={setIsSoloTraveler}
-          suggestedName={userName}
-        />
-      ),
     },
   ];
 

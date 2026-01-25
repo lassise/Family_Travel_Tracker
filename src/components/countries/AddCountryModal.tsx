@@ -102,7 +102,8 @@ const AddCountryModal = ({
         countryId = newCountry.id;
       }
 
-      // Add country visits for selected members
+      // Add country visits for selected members (only if there are members selected)
+      // This gracefully handles the case where there are 0 family members
       if (selectedMembers.length > 0) {
         // First, get existing visits to avoid duplicates
         const { data: existingVisits } = await supabase
@@ -129,14 +130,19 @@ const AddCountryModal = ({
         }
       }
 
-      toast({ title: "Country added successfully!" });
+      toast({ 
+        title: "Country added successfully!",
+        description: familyMembers.length === 0 
+          ? "Add family members in Settings to track who visited." 
+          : undefined
+      });
       onOpenChange(false);
       onSuccess();
     } catch (error) {
       console.error("Error adding country:", error);
       toast({
         title: "Error",
-        description: "Failed to add country",
+        description: "Failed to add country. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -238,7 +244,7 @@ const AddCountryModal = ({
           </div>
 
           {/* Family Members Selection */}
-          {familyMembers.length > 0 && (
+          {familyMembers.length > 0 ? (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <Label>Who visited?</Label>
@@ -274,6 +280,12 @@ const AddCountryModal = ({
                   </div>
                 ))}
               </div>
+            </div>
+          ) : (
+            <div className="p-3 rounded-md bg-muted/50 border border-dashed">
+              <p className="text-sm text-muted-foreground">
+                No family members set up yet. The country will be added and you can assign visitors later in Settings.
+              </p>
             </div>
           )}
 
