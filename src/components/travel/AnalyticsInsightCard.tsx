@@ -26,7 +26,7 @@ const CONTINENT_TOTALS: Record<string, number> = {
 };
 
 const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true); // Expanded by default
   const { visitDetails } = useVisitDetails();
 
   const visitedByContinent = countries
@@ -98,6 +98,44 @@ const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
     // 6. Countries Visited Multiple Times
     const repeatVisits = Object.entries(countryVisitCounts).filter(([_, count]) => count > 1);
     
+    // 6b. First-time vs Revisits Percentage
+    const firstTimeCountries = Object.entries(countryVisitCounts).filter(([_, count]) => count === 1).length;
+    const revisitCountries = repeatVisits.length;
+    const totalUniqueCountries = Object.keys(countryVisitCounts).length;
+    const firstTimePercentage = totalUniqueCountries > 0 ? Math.round((firstTimeCountries / totalUniqueCountries) * 100) : 0;
+    const revisitPercentage = totalUniqueCountries > 0 ? Math.round((revisitCountries / totalUniqueCountries) * 100) : 0;
+    
+    // 6c. Top Countries by Days Spent
+    const countryDaysMap = validVisits.reduce((acc, visit) => {
+      const country = visitedCountries.find(c => c.id === visit.country_id);
+      if (country && visit.number_of_days) {
+        acc[country.name] = (acc[country.name] || 0) + (visit.number_of_days || 0);
+      }
+      return acc;
+    }, {} as Record<string, number>);
+    const topCountriesByDays = Object.entries(countryDaysMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, days]) => ({ name, days }));
+    
+    // 6d. New Countries Added YTD
+    const currentYear = new Date().getFullYear();
+    const firstVisitByCountry = new Map<string, number>();
+    validVisits.forEach(visit => {
+      const country = visitedCountries.find(c => c.id === visit.country_id);
+      if (country) {
+        const year = visit.visit_date ? getYear(parseISO(visit.visit_date)) : (visit.approximate_year || 0);
+        if (year > 0) {
+          const existing = firstVisitByCountry.get(country.name);
+          if (!existing || year < existing) {
+            firstVisitByCountry.set(country.name, year);
+          }
+        }
+      }
+    });
+    const newCountriesYTD = Array.from(firstVisitByCountry.entries())
+      .filter(([_, year]) => year === currentYear).length;
+    
     // 7. Travel Velocity (countries per year)
     const years = Object.keys(visitsByYear).map(Number).sort();
     const firstYear = years[0];
@@ -132,6 +170,10 @@ const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
       longestTrip: longestTrip && longestTripCountry ? { country: longestTripCountry.name, days: longestTrip.number_of_days || 0 } : null,
       favoriteMonth: favoriteMonth ? { month: monthNames[parseInt(favoriteMonth[0])], count: favoriteMonth[1] } : null,
       repeatVisits: repeatVisits.length,
+      firstTimePercentage,
+      revisitPercentage,
+      topCountriesByDays: topCountriesByDays.length > 0 ? topCountriesByDays : null,
+      newCountriesYTD: newCountriesYTD > 0 ? newCountriesYTD : null,
       velocity,
       uniqueTrips: uniqueTrips.size,
       continentsVisited,
@@ -425,6 +467,57 @@ const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
                             <p className="text-sm font-medium text-foreground">Travel Streak</p>
                             <p className="text-xs text-muted-foreground">
                               {analyticsInsights.maxStreak} consecutive years of travel
+                            </p>
+                          </div>
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* First-time vs Revisits */}
+                    {analyticsInsights.firstTimePercentage !== undefined && analyticsInsights.revisitPercentage !== undefined && (
+                      <Card className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 rounded-full bg-blue-500/10">
+                            <Repeat className="h-4 w-4 text-blue-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Visit Pattern</p>
+                            <p className="text-xs text-muted-foreground">
+                              {analyticsInsights.firstTimePercentage}% first-time, {analyticsInsights.revisitPercentage}% revisits
+                            </p>
+                          </div>
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* Top Countries by Days */}
+                    {analyticsInsights.topCountriesByDays && analyticsInsights.topCountriesByDays.length > 0 && (
+                      <Card className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 rounded-full bg-teal-500/10">
+                            <Clock className="h-4 w-4 text-teal-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Top by Days Spent</p>
+                            <p className="text-xs text-muted-foreground">
+                              {analyticsInsights.topCountriesByDays[0]?.name}: {analyticsInsights.topCountriesByDays[0]?.days} days
+                            </p>
+                          </div>
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* New Countries YTD */}
+                    {analyticsInsights.newCountriesYTD !== null && analyticsInsights.newCountriesYTD > 0 && (
+                      <Card className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 rounded-full bg-green-500/10">
+                            <Zap className="h-4 w-4 text-green-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">New Countries This Year</p>
+                            <p className="text-xs text-muted-foreground">
+                              {analyticsInsights.newCountriesYTD} new countries added
                             </p>
                           </div>
                         </div>

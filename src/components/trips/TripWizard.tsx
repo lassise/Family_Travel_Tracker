@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useTrips } from "@/hooks/useTrips";
-import { useTripCountries } from "@/hooks/useTripCountries";
+import { useTripCountries, type CountryWithDates } from "@/hooks/useTripCountries";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { TripBasicsStep } from "./wizard/TripBasicsStep";
@@ -61,8 +61,8 @@ const STEPS = [
 
 const TripWizard = () => {
   const navigate = useNavigate();
-  const { createTrip } = useTrips();
-  const { addTripCountries } = useTripCountries();
+  const { createTrip, updateTrip } = useTrips();
+  const { addTripCountries, calculateTripDateRange, syncCountryVisitDetails } = useTripCountries();
   const { profiles, activeProfile } = useTravelProfiles();
   const [currentStep, setCurrentStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -139,7 +139,29 @@ const TripWizard = () => {
       case 2:
         // Destination required, dates only if they said they have them
         if (!formData.destination) return false;
-        if (formData.hasDates && (!formData.startDate || !formData.endDate)) return false;
+        if (formData.hasDates) {
+          // If countries are selected, check if country dates are set
+          if (formData.countries.length > 0) {
+            // Check if any country has invalid dates (start > end)
+            const hasInvalidDates = formData.countries.some(c => {
+              const country = c as CountryWithDates;
+              return country.start_date && country.end_date && country.start_date > country.end_date;
+            });
+            if (hasInvalidDates) return false;
+            
+            // Check if trip dates are calculated (from country dates) or manually set
+            if (!formData.startDate || !formData.endDate) {
+              // Try to calculate from country dates
+              const dateRange = calculateTripDateRange(formData.countries as CountryWithDates[]);
+              if (!dateRange.start_date || !dateRange.end_date) {
+                return false; // No valid dates
+              }
+            }
+          } else {
+            // No countries, require manual trip dates
+            if (!formData.startDate || !formData.endDate) return false;
+          }
+        }
         return true;
       case 3:
         // Kids ages only required if traveling with kids
@@ -232,9 +254,56 @@ const TripWizard = () => {
 
       // Save trip countries to trip_countries table
       if (formData.countries.length > 0) {
-        const { error: countriesError } = await addTripCountries(trip.id, formData.countries);
+        // Convert to CountryWithDates[] - preserve dates if they exist (from Phase 2 UI)
+        const countriesWithDates: CountryWithDates[] = formData.countries.map(country => ({
+          ...country,
+          // Preserve dates if they were set in TripBasicsStep
+          start_date: (country as CountryWithDates).start_date,
+          end_date: (country as CountryWithDates).end_date,
+        }));
+
+        // Calculate trip dates from country dates if available
+        const dateRange = calculateTripDateRange(countriesWithDates);
+        
+        // If country dates exist, update trip dates to span all countries
+        if (dateRange.start_date && dateRange.end_date) {
+          const { error: dateUpdateError } = await updateTrip(trip.id, {
+            start_date: dateRange.start_date,
+            end_date: dateRange.end_date,
+          });
+          
+          if (dateUpdateError) {
+            logger.error('Error updating trip dates from country dates:', dateUpdateError);
+            // Non-critical, continue
+          }
+        }
+
+        // Add countries to trip_countries table
+        const { error: countriesError } = await addTripCountries(trip.id, countriesWithDates);
         if (countriesError) {
           logger.error('Error saving trip countries:', countriesError);
+          // Non-critical error, continue
+        }
+
+        // Sync country_visit_details entries
+        // This creates visit_details entries so countries show the trip in their history
+        // Pass countries directly to avoid race condition with state updates
+        const countriesForSync = countriesWithDates
+          .filter(c => c.start_date && c.end_date)
+          .map((c, index) => ({
+            id: '', // Not needed for sync
+            trip_id: trip.id,
+            country_code: c.code,
+            country_name: c.name,
+            order_index: index,
+            start_date: c.start_date || null,
+            end_date: c.end_date || null,
+            created_at: new Date().toISOString(),
+          }));
+        
+        const { error: syncError } = await syncCountryVisitDetails(trip.id, trip.title, countriesForSync);
+        if (syncError) {
+          logger.error('Error syncing country visit details:', syncError);
           // Non-critical error, continue
         }
 

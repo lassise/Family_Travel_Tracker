@@ -26,6 +26,12 @@ import { CustomActivityDialog } from "@/components/trips/CustomActivityDialog";
 import ActivityBookingCard from "@/components/trips/ActivityBookingCard";
 import TrainSegmentCard from "@/components/trips/TrainSegmentCard";
 import LodgingSuggestionsCard from "@/components/trips/LodgingSuggestionsCard";
+import { TripAnalytics } from "@/components/trips/TripAnalytics";
+import { useTripCountries } from "@/hooks/useTripCountries";
+import { EditTripCountriesDialog } from "@/components/trips/EditTripCountriesDialog";
+import CountryFlag from "@/components/common/CountryFlag";
+import { format, parseISO } from "date-fns";
+import { Link } from "react-router-dom";
 
 interface ItineraryItem {
   id: string;
@@ -137,6 +143,7 @@ const TripDetail = () => {
   const { tripId } = useParams<{ tripId: string }>();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { getCountriesForTrip } = useTripCountries();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [trainSegments, setTrainSegments] = useState<TrainSegment[]>([]);
@@ -355,7 +362,58 @@ const TripDetail = () => {
               </span>
             </div>
           )}
+
+          {/* Countries Visited */}
+          {tripId && (() => {
+            const tripCountries = getCountriesForTrip(tripId);
+            if (tripCountries.length > 0) {
+              return (
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Countries Visited:</span>
+                    </div>
+                    <EditTripCountriesDialog tripId={tripId} tripTitle={trip.title} />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {tripCountries.map((tc) => {
+                      const hasDates = tc.start_date && tc.end_date;
+                      return (
+                        <Link
+                          key={tc.id}
+                          to={`/countries/${tc.country_code.toLowerCase()}`}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted hover:bg-muted/80 transition-colors"
+                        >
+                          <CountryFlag 
+                            countryCode={tc.country_code} 
+                            countryName={tc.country_name} 
+                            size="sm" 
+                          />
+                          <span className="text-sm font-medium">{tc.country_name}</span>
+                          {hasDates && (
+                            <span className="text-xs text-muted-foreground">
+                              ({format(parseISO(tc.start_date!), "MMM d")} - {format(parseISO(tc.end_date!), "MMM d, yyyy")})
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
+
+        {/* Trip Analytics */}
+        <TripAnalytics 
+          trip={trip}
+          itineraryDays={days}
+          trainSegments={trainSegments}
+          lodgingSuggestions={lodgingSuggestions}
+        />
 
         {/* Main Content Tabs */}
         <Tabs value={activeDay.startsWith("tab-") ? activeDay : "tab-itinerary"} onValueChange={(val) => {

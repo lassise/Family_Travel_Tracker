@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PendingInvitesCard from "@/components/trips/PendingInvitesCard";
+import { CombineTripsSuggestion } from "@/components/trips/CombineTripsSuggestion";
+import { EditTripCountriesDialog } from "@/components/trips/EditTripCountriesDialog";
 
 const Trips = () => {
   const { user, loading: authLoading } = useAuth();
@@ -109,6 +111,11 @@ const Trips = () => {
         {/* Pending Invites */}
         <PendingInvitesCard onAccepted={refetch} />
 
+        {/* Combine Trips Suggestion - only show for completed trips */}
+        {activeTab === "completed" && (
+          <CombineTripsSuggestion trips={trips} onCombined={refetch} />
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
           <TabsList className="mb-6">
             <TabsTrigger value="all">All ({trips.length})</TabsTrigger>
@@ -179,11 +186,11 @@ const Trips = () => {
                               <DropdownMenuItem
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  navigate(`/trips/${trip.id}/edit`);
+                                  navigate(`/trips/${trip.id}`);
                                 }}
                               >
                                 <Edit className="h-4 w-4 mr-2" />
-                                Edit
+                                View & Edit
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive"

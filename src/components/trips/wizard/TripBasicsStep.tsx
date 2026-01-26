@@ -5,6 +5,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { TripFormData } from "../TripWizard";
 import { Calendar, Hotel, Users, Briefcase, Palmtree, ArrowRightLeft } from "lucide-react";
 import MultiCountrySelect from "../MultiCountrySelect";
+import { CountryDatePicker } from "../CountryDatePicker";
+import { useTripCountries, type CountryWithDates } from "@/hooks/useTripCountries";
+import { useMemo } from "react";
+import { format, parseISO } from "date-fns";
 import type { CountryOption } from "@/lib/countriesData";
 
 interface TripBasicsStepProps {
@@ -19,13 +23,66 @@ const PURPOSE_OPTIONS = [
 ];
 
 export const TripBasicsStep = ({ formData, updateFormData }: TripBasicsStepProps) => {
+  const { calculateTripDateRange } = useTripCountries();
+
   const handleCountriesChange = (countries: CountryOption[]) => {
+    // Convert to CountryWithDates, preserving existing dates
+    const countriesWithDates: CountryWithDates[] = countries.map(country => {
+      const existing = formData.countries.find(c => c.code === country.code);
+      return {
+        ...country,
+        start_date: (existing as CountryWithDates)?.start_date,
+        end_date: (existing as CountryWithDates)?.end_date,
+      };
+    });
+
     updateFormData({ 
-      countries,
+      countries: countriesWithDates,
       // Set destination to comma-separated list for backward compatibility
       destination: countries.map(c => c.name).join(", ")
     });
   };
+
+  // Convert countries to CountryWithDates for date calculation
+  const countriesWithDates: CountryWithDates[] = useMemo(() => {
+    return (formData.countries || []).map(c => ({
+      ...c,
+      start_date: (c as CountryWithDates).start_date,
+      end_date: (c as CountryWithDates).end_date,
+    }));
+  }, [formData.countries]);
+
+  // Calculate trip dates from country dates
+  const calculatedTripDates = useMemo(() => {
+    return calculateTripDateRange(countriesWithDates);
+  }, [countriesWithDates, calculateTripDateRange]);
+
+  // Update trip dates when country dates change
+  const handleCountryDateChange = (countryCode: string, startDate: string | undefined, endDate: string | undefined) => {
+    // Validate: end date must be >= start date
+    if (startDate && endDate && startDate > endDate) {
+      // Don't update if invalid - let the error state show in CountryDatePicker
+      return;
+    }
+
+    const updatedCountries: CountryWithDates[] = formData.countries.map(c => 
+      c.code === countryCode
+        ? { ...c, start_date: startDate, end_date: endDate }
+        : c
+    );
+
+    // Calculate new trip dates
+    const newTripDates = calculateTripDateRange(updatedCountries);
+
+    updateFormData({
+      countries: updatedCountries,
+      startDate: newTripDates.start_date || formData.startDate,
+      endDate: newTripDates.end_date || formData.endDate,
+    });
+  };
+
+  const showCountryDatePickers = formData.hasDates && formData.countries.length > 0;
+  const showTripDateInputs = formData.hasDates && formData.countries.length === 0;
 
   return (
     <div className="space-y-6">
@@ -130,7 +187,44 @@ export const TripBasicsStep = ({ formData, updateFormData }: TripBasicsStepProps
         )}
       </div>
 
-      {formData.hasDates && (
+      {/* Country Date Pickers - shown when hasDates and countries selected */}
+      {showCountryDatePickers && (
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Set dates for each country</Label>
+          <div className="space-y-2">
+            {formData.countries.map((country) => (
+              <CountryDatePicker
+                key={country.code}
+                country={country}
+                startDate={(country as CountryWithDates).start_date}
+                endDate={(country as CountryWithDates).end_date}
+                onChange={(startDate, endDate) => 
+                  handleCountryDateChange(country.code, startDate, endDate)
+                }
+              />
+            ))}
+          </div>
+          
+          {/* Display calculated trip dates */}
+          {calculatedTripDates.start_date && calculatedTripDates.end_date && (
+            <div className="p-3 rounded-lg bg-muted/50 border">
+              <div className="flex items-center gap-2 text-sm">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">Trip Duration:</span>
+                <span className="text-muted-foreground">
+                  {format(parseISO(calculatedTripDates.start_date), "MMM d, yyyy")} - {format(parseISO(calculatedTripDates.end_date), "MMM d, yyyy")}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Auto-calculated from country dates
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Trip Date Inputs - shown when hasDates but no countries selected (backward compat) */}
+      {showTripDateInputs && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="startDate" className="flex items-center gap-2">
