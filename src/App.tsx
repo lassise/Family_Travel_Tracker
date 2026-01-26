@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Lazy load all pages for code splitting
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -28,7 +29,28 @@ const SavedFlights = lazy(() => import("./pages/SavedFlights"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const DiagnosticShare = lazy(() => import("./pages/DiagnosticShare"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Retry failed requests with exponential backoff
+      retry: 3,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      // Data stays fresh for 5 minutes (reduces unnecessary refetches)
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      // Refresh data when user returns to the tab
+      refetchOnWindowFocus: true,
+      // Refresh data when network reconnects
+      refetchOnReconnect: true,
+      // Don't refetch on mount if data is still fresh
+      refetchOnMount: false,
+    },
+    mutations: {
+      // Retry mutations once (more conservative than queries)
+      retry: 1,
+      retryDelay: 1000,
+    },
+  },
+});
 
 // Loading fallback component
 const PageLoader = () => (
@@ -48,29 +70,31 @@ const App = () => (
         <Sonner />
         <PWAInstallPrompt />
         <BrowserRouter>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/dashboard/:token" element={<PublicDashboard />} />
-              <Route path="/share/dashboard/:token" element={<PublicDashboard />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/trips" element={<Trips />} />
-              <Route path="/trips/new" element={<NewTrip />} />
-              <Route path="/trips/:tripId" element={<TripDetail />} />
-              <Route path="/family" element={<TravelHistory />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/highlights/:token" element={<Highlights />} />
-              <Route path="/explore" element={<Explore />} />
-              <Route path="/year-wrapped" element={<YearWrapped />} />
-              <Route path="/flights" element={<Flights />} />
-              <Route path="/saved-flights" element={<SavedFlights />} />
-              <Route path="/diagnostic/share" element={<DiagnosticShare />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/dashboard/:token" element={<PublicDashboard />} />
+                <Route path="/share/dashboard/:token" element={<PublicDashboard />} />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/trips" element={<Trips />} />
+                <Route path="/trips/new" element={<NewTrip />} />
+                <Route path="/trips/:tripId" element={<TripDetail />} />
+                <Route path="/family" element={<TravelHistory />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/highlights/:token" element={<Highlights />} />
+                <Route path="/explore" element={<Explore />} />
+                <Route path="/year-wrapped" element={<YearWrapped />} />
+                <Route path="/flights" element={<Flights />} />
+                <Route path="/saved-flights" element={<SavedFlights />} />
+                <Route path="/diagnostic/share" element={<DiagnosticShare />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>

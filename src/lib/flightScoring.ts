@@ -1,5 +1,6 @@
 import { getAirportQuality, AIRLINES, type Airline } from "./airportsData";
 import type { FlightPreferences } from "@/hooks/useFlightPreferences";
+import { logger } from "./logger";
 export type { FlightPreferences };
 
 export interface FlightSegment {
@@ -39,6 +40,7 @@ export interface FlightResult {
   isAlternateOrigin?: boolean;
   minSavingsRequired?: number;
   layovers?: LayoverInfo[];
+  carbonEmissions?: number; // CO2 emissions in kg
 }
 
 export interface PreferenceMatch {
@@ -288,13 +290,35 @@ const matchesAirlinePreference = (
 };
 
 // Parse duration - can be ISO 8601 string "PT5H30M" or number (minutes)
+// Handles edge cases: "PT5H" (no minutes), "PT30M" (no hours), invalid formats
 const parseDuration = (duration: string | number | undefined | null): number => {
   if (duration === null || duration === undefined) return 0;
-  if (typeof duration === 'number') return duration;
-  if (typeof duration !== 'string') return 0;
-  const hours = duration.match(/(\d+)H/)?.[1] || 0;
-  const minutes = duration.match(/(\d+)M/)?.[1] || 0;
-  return parseInt(String(hours)) * 60 + parseInt(String(minutes));
+  if (typeof duration === 'number') {
+    // Ensure non-negative
+    return Math.max(0, Math.round(duration));
+  }
+  if (typeof duration !== 'string' || duration.trim() === '') return 0;
+  
+  try {
+    // Handle ISO 8601 format: PT5H30M, PT5H, PT30M, etc.
+    const hoursMatch = duration.match(/(\d+)H/);
+    const minutesMatch = duration.match(/(\d+)M/);
+    
+    const hours = hoursMatch ? parseInt(hoursMatch[1], 10) : 0;
+    const minutes = minutesMatch ? parseInt(minutesMatch[1], 10) : 0;
+    
+    // Validate parsed values
+    if (isNaN(hours) || isNaN(minutes) || hours < 0 || minutes < 0) {
+      logger.warn('Invalid duration format:', duration);
+      return 0;
+    }
+    
+    const totalMinutes = hours * 60 + minutes;
+    return Math.max(0, totalMinutes);
+  } catch (error) {
+    logger.warn('Error parsing duration:', duration, error);
+    return 0;
+  }
 };
 
 // Get hour from datetime string
@@ -1338,13 +1362,25 @@ export const scoreFlights = (
     scoredFlights[index] = scoredFlight;
   }
 
-  // Sort by FINAL score descending, but put avoided airlines at the bottom regardless of score
+  // Sort by FINAL score descending, but prioritize nonstop flights when prefer_nonstop is true
+  // and put avoided airlines at the bottom regardless of score
   // CRITICAL: The sorted array is the source of truth for display order and numbering
   scoredFlights.sort((a, b) => {
-    // Avoided airlines always go to the bottom (unless ALL flights are avoided)
+    // First: Avoided airlines always go to the bottom (unless ALL flights are avoided)
     if (a.isAvoidedAirline && !b.isAvoidedAirline) return 1;
     if (!a.isAvoidedAirline && b.isAvoidedAirline) return -1;
-    // Within same category (both avoided or both not avoided), sort by FINAL score descending
+    
+    // Second: When prefer_nonstop is true, prioritize nonstop flights (similar to avoided airlines logic)
+    if (preferences.prefer_nonstop) {
+      const aIsNonstop = a.itineraries.every(it => it.segments.length === 1);
+      const bIsNonstop = b.itineraries.every(it => it.segments.length === 1);
+      
+      // Nonstop flights come before layover flights
+      if (aIsNonstop && !bIsNonstop) return -1;
+      if (!aIsNonstop && bIsNonstop) return 1;
+    }
+    
+    // Within same category (both nonstop or both layover, both avoided or both not avoided), sort by FINAL score descending
     return b.score - a.score;
   });
   

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Globe, ArrowRight, Users } from "lucide-react";
@@ -11,6 +11,7 @@ import TravelMilestones from "@/components/travel/TravelMilestones";
 import PublicTravelTimeline from "@/components/travel/PublicTravelTimeline";
 import PublicPhotoGallery from "@/components/travel/PublicPhotoGallery";
 import { useHomeCountry } from "@/hooks/useHomeCountry";
+import { logger } from "@/lib/logger";
 
 interface ShareSettings {
   show_stats: boolean;
@@ -135,7 +136,7 @@ const PublicDashboard = () => {
   // DEV logging
   useEffect(() => {
     if (import.meta.env.DEV) {
-      console.log("[PublicDashboard] Token from URL:", token);
+      logger.log("[PublicDashboard] Token from URL:", token);
     }
   }, [token]);
 
@@ -187,14 +188,21 @@ const PublicDashboard = () => {
     return continents.size;
   }, [filteredCountries]);
 
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+
   useEffect(() => {
+    isMountedRef.current = true;
+    
     async function loadPublicDashboard() {
       if (!token) {
-        setState({ loading: false, error: "No token provided", data: null, debug: null });
+        if (isMountedRef.current) {
+          setState({ loading: false, error: "No token provided", data: null, debug: null });
+        }
         return;
       }
 
-      console.log("[PublicDashboard] Fetching dashboard for token:", token);
+      logger.log("[PublicDashboard] Fetching dashboard for token:", token);
 
       try {
         // Call Edge Function - ONLY data source for this page
@@ -202,9 +210,12 @@ const PublicDashboard = () => {
           body: { token },
         });
 
-        console.log("[PublicDashboard] Edge function response:", { ok: data?.ok, error: error?.message });
+        logger.log("[PublicDashboard] Edge function response:", { ok: data?.ok, error: error?.message });
 
         if (error) throw error;
+
+        // Only update state if component is still mounted
+        if (!isMountedRef.current) return;
 
         if (!data.ok) {
           setState({
@@ -224,23 +235,30 @@ const PublicDashboard = () => {
           debug: data.debug,
         });
         
-        console.log("[PublicDashboard] Data loaded successfully:", {
+        logger.log("[PublicDashboard] Data loaded successfully:", {
           familyMembers: data.data.familyMembers?.length,
           visitDetails: data.data.visitDetails?.length,
           photos: data.data.photos?.length,
         });
       } catch (err) {
-        console.error("[PublicDashboard] Edge Function error", err);
-        setState({
-          loading: false,
-          error: err instanceof Error ? err.message : "Failed to load dashboard",
-          data: null,
-          debug: null,
-        });
+        logger.error("[PublicDashboard] Edge Function error", err);
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setState({
+            loading: false,
+            error: err instanceof Error ? err.message : "Failed to load dashboard",
+            data: null,
+            debug: null,
+          });
+        }
       }
     }
 
     loadPublicDashboard();
+
+    return () => {
+      isMountedRef.current = false;
+    };
   }, [token]);
 
   if (state.loading) {
@@ -283,7 +301,26 @@ const PublicDashboard = () => {
 
   const { data, debug } = state;
   const { shareSettings, owner, familyMembers, stateVisits, photos, stats } = data;
-  const showMemories = shareSettings.show_timeline || shareSettings.show_photos || shareSettings.include_memories;
+  
+  // Defensive checks to prevent crashes
+  const safeShareSettings = shareSettings || {
+    show_stats: true,
+    show_map: true,
+    show_countries: true,
+    show_photos: true,
+    show_timeline: true,
+    show_family_members: true,
+    show_achievements: true,
+    show_wishlist: false,
+    include_memories: true,
+  };
+  
+  const safePhotos = photos || [];
+  const safeFamilyMembers = familyMembers || [];
+  const safeStateVisits = stateVisits || [];
+  
+  // Show memories if any memory-related setting is enabled
+  const showMemories = safeShareSettings.show_timeline || safeShareSettings.show_photos || safeShareSettings.include_memories;
 
   return (
     <div className="min-h-screen bg-background">
@@ -322,7 +359,7 @@ const PublicDashboard = () => {
           </div>
           
           {/* Family Member Filter - ADD: Filter dropdown */}
-          {familyMembers.length > 1 && (
+          {safeFamilyMembers.length > 1 && (
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
               <Select
@@ -334,9 +371,9 @@ const PublicDashboard = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All members</SelectItem>
-                  {familyMembers.map((member) => (
+                  {safeFamilyMembers.map((member) => (
                     <SelectItem key={member.id} value={member.id}>
-                      {member.name} ({member.countriesVisited} countries)
+                      {member.name} ({member.countriesVisited || 0} countries)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -346,7 +383,7 @@ const PublicDashboard = () => {
         </div>
 
         {/* Hero Summary - Countries Visited Overview */}
-        {shareSettings.show_stats && (
+        {safeShareSettings.show_stats && (
           <div className="mb-8">
             <HeroSummaryCard
               countries={filteredCountries}
@@ -372,66 +409,46 @@ const PublicDashboard = () => {
         )}
 
         {/* Interactive World Map */}
-        {shareSettings.show_map && (
+        {safeShareSettings.show_map && (
           <div className="mb-8">
             <InteractiveWorldMap
               countries={filteredCountries}
               wishlist={[]}
-              homeCountry={owner.homeCountry || null}
+              homeCountry={owner?.homeCountry || null}
               onRefetch={() => {}}
               selectedMemberId={selectedMemberId}
               readOnly
-              stateVisitsOverride={stateVisits}
+              stateVisitsOverride={safeStateVisits}
             />
           </div>
         )}
 
         {/* Travel Milestones */}
-        {shareSettings.show_achievements && (
+        {safeShareSettings.show_achievements && (
           <div className="mb-8">
             <TravelMilestones
               countries={filteredCountries}
-              familyMembers={familyMembers}
+              familyMembers={safeFamilyMembers}
               totalContinents={totalContinents}
             />
           </div>
         )}
 
-        {/* Memories Section - Timeline and Photos - ADD: Must render */}
+        {/* Memories Section - Timeline and Photos - Matches logged-in user's memories tab */}
         {showMemories && (
           <div className="mb-8 space-y-6">
-            {/* Section Header */}
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold">Memories</h2>
-              {selectedMemberId && (
-                <span className="text-sm text-muted-foreground">
-                  — {familyMembers.find(m => m.id === selectedMemberId)?.name}'s trips
-                </span>
-              )}
-            </div>
-            
-            {/* Public Timeline with proper formatting (flags, colors, dates) */}
-            {(shareSettings.show_timeline || shareSettings.include_memories) && filteredVisitDetails.length > 0 && (
+            {/* Travel Timeline - Always show if memories are enabled */}
+            {(safeShareSettings.show_timeline || safeShareSettings.include_memories) && (
               <PublicTravelTimeline 
                 countries={filteredCountries} 
                 visitDetails={filteredVisitDetails}
-                photos={photos}
+                photos={safePhotos}
               />
             )}
 
-            {/* Photo Gallery */}
-            {shareSettings.show_photos && photos.length > 0 && (
-              <PublicPhotoGallery countries={filteredCountries} photos={photos} />
-            )}
-            
-            {/* Empty state if no memories */}
-            {filteredVisitDetails.length === 0 && photos.length === 0 && (
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  <Globe className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                  <p>No travel memories to display yet.</p>
-                </CardContent>
-              </Card>
+            {/* Photo Gallery - Always show if photos are enabled */}
+            {safeShareSettings.show_photos && (
+              <PublicPhotoGallery countries={filteredCountries} photos={safePhotos} />
             )}
           </div>
         )}
@@ -471,7 +488,7 @@ const PublicDashboard = () => {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Family Members:</span>
-                  <span className="ml-2">{familyMembers.length}</span>
+                  <span className="ml-2">{safeFamilyMembers.length}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Visit Details:</span>

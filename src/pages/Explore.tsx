@@ -15,6 +15,7 @@ import {
   Mountain, Waves, Building, TreePine, Plane, Sun
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 import { countries as allCountriesData } from "countries-list";
 
 type Category = 'all' | 'trending' | 'adventure' | 'beach' | 'city' | 'nature' | 'cultural';
@@ -105,7 +106,7 @@ const Explore = () => {
         setAiRecommendations(data.recommendations.map((r: any) => r.country));
       }
     } catch (error) {
-      console.error("Error generating AI recommendations:", error);
+      logger.error("Error generating AI recommendations:", error);
     } finally {
       setLoadingAi(false);
     }

@@ -6,31 +6,32 @@ export interface Airport {
   country: string;
   lat?: number;
   lon?: number;
+  hasPlayground?: boolean; // Family-friendly playground available
 }
 
 // Major US airports - commonly used
 export const US_AIRPORTS: Airport[] = [
-  { code: "ATL", name: "Hartsfield-Jackson Atlanta International", city: "Atlanta", country: "US" },
+  { code: "ATL", name: "Hartsfield-Jackson Atlanta International", city: "Atlanta", country: "US", hasPlayground: true },
   { code: "LAX", name: "Los Angeles International", city: "Los Angeles", country: "US" },
-  { code: "ORD", name: "O'Hare International", city: "Chicago", country: "US" },
-  { code: "DFW", name: "Dallas/Fort Worth International", city: "Dallas", country: "US" },
-  { code: "DEN", name: "Denver International", city: "Denver", country: "US" },
+  { code: "ORD", name: "O'Hare International", city: "Chicago", country: "US", hasPlayground: true },
+  { code: "DFW", name: "Dallas/Fort Worth International", city: "Dallas", country: "US", hasPlayground: true },
+  { code: "DEN", name: "Denver International", city: "Denver", country: "US", hasPlayground: true },
   { code: "JFK", name: "John F. Kennedy International", city: "New York", country: "US" },
   { code: "SFO", name: "San Francisco International", city: "San Francisco", country: "US" },
-  { code: "SEA", name: "Seattle-Tacoma International", city: "Seattle", country: "US" },
+  { code: "SEA", name: "Seattle-Tacoma International", city: "Seattle", country: "US", hasPlayground: true },
   { code: "LAS", name: "Harry Reid International", city: "Las Vegas", country: "US" },
-  { code: "MCO", name: "Orlando International", city: "Orlando", country: "US" },
+  { code: "MCO", name: "Orlando International", city: "Orlando", country: "US", hasPlayground: true },
   { code: "EWR", name: "Newark Liberty International", city: "Newark", country: "US" },
   { code: "MIA", name: "Miami International", city: "Miami", country: "US" },
   { code: "PHX", name: "Phoenix Sky Harbor International", city: "Phoenix", country: "US" },
   { code: "IAH", name: "George Bush Intercontinental", city: "Houston", country: "US" },
   { code: "BOS", name: "Boston Logan International", city: "Boston", country: "US" },
-  { code: "MSP", name: "Minneapolis-St. Paul International", city: "Minneapolis", country: "US" },
+  { code: "MSP", name: "Minneapolis-St. Paul International", city: "Minneapolis", country: "US", hasPlayground: true },
   { code: "FLL", name: "Fort Lauderdale-Hollywood International", city: "Fort Lauderdale", country: "US" },
   { code: "DTW", name: "Detroit Metropolitan Wayne County", city: "Detroit", country: "US" },
   { code: "PHL", name: "Philadelphia International", city: "Philadelphia", country: "US" },
   { code: "LGA", name: "LaGuardia", city: "New York", country: "US" },
-  { code: "BWI", name: "Baltimore/Washington International", city: "Baltimore", country: "US" },
+  { code: "BWI", name: "Baltimore/Washington International", city: "Baltimore", country: "US", hasPlayground: true },
   { code: "SLC", name: "Salt Lake City International", city: "Salt Lake City", country: "US" },
   { code: "DCA", name: "Ronald Reagan Washington National", city: "Washington", country: "US" },
   { code: "IAD", name: "Washington Dulles International", city: "Washington", country: "US" },

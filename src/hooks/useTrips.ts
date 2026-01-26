@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { useAuth } from "@/hooks/useAuth";
 
 export interface Trip {
@@ -50,7 +51,7 @@ export const useTrips = () => {
       if (error) throw error;
       setTrips(data || []);
     } catch (error) {
-      console.error("Error fetching trips:", error);
+      logger.error("Error fetching trips:", error);
     } finally {
       setLoading(false);
     }

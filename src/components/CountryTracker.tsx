@@ -217,8 +217,8 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
             const codeFromName = parsed?.[1] || "";
             const displayName = parsed?.[2] || country.name;
 
-            // Derive ISO2 code: check stored flag if it's a code, then name prefix, then lookup
-            // Also check for region codes like GB-SCT for Scotland
+            // Derive ISO2 code: prioritize region mapping by name (for UK nations like Scotland, Wales, etc.)
+            // This matches the logic used in TravelTimeline to ensure consistent flag display
             const rawFlag = (country.flag || "").trim();
             const storedFlag = rawFlag.toUpperCase();
             const isStoredFlagACode = /^[A-Z]{2}(-[A-Z]{3})?$/.test(storedFlag);
@@ -226,11 +226,17 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
             // Scotland safeguard: if the stored emoji itself is the Scotland flag, always use GB-SCT
             const isScotlandEmoji = rawFlag.includes("🏴");
 
+            // Scotland (and other UK nations) can end up stored as "GB" in the DB.
+            // Prefer region mapping by name to ensure the correct regional flag.
             const regionCode = getRegionCode(displayName) || getRegionCode(country.name);
+            const codeFromStoredFlag = isStoredFlagACode ? storedFlag : '';
+
+            // Priority: regionCode (from name) > storedFlag > other lookups
+            // This ensures Scotland shows Saltire, Wales shows dragon flag, etc.
             const countryCode = (
               (isScotlandEmoji ? "GB-SCT" : "") ||
-              (isStoredFlagACode ? storedFlag : "") || 
               regionCode ||
+              codeFromStoredFlag ||
               codeFromName || 
               getCountryCode(displayName) || 
               getCountryCode(country.name) || 

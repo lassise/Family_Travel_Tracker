@@ -1,8 +1,12 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { scoreFlights, type ScoredFlight, type FlightResult } from "@/lib/flightScoring";
 import type { FlightPreferences } from "@/hooks/useFlightPreferences";
 import { toast } from "sonner";
+import { categorizeFlightError } from "@/lib/flightErrors";
+import { validateFlightResults } from "@/lib/flightResponseValidator";
+import { logger } from "@/lib/logger";
+import { retryWithBackoff } from "@/lib/retryWithBackoff";
 
 export interface FlightLegSearch {
   legId: string;
@@ -41,6 +45,10 @@ export const useFlightSearch = (
   const [legResults, setLegResults] = useState<Record<string, FlightLegResult>>({});
   const [isSearching, setIsSearching] = useState(false);
   const cacheRef = useRef<Record<string, CacheEntry>>({});
+  // AbortController to cancel in-flight requests and prevent race conditions
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // Track active requests to prevent duplicate concurrent searches
+  const activeRequestsRef = useRef<Map<string, Promise<ScoredFlight[]>>>(new Map());
 
   // Store round-trip params for sequential search
   const [roundTripParams, setRoundTripParams] = useState<{
@@ -80,36 +88,110 @@ export const useFlightSearch = (
   // Search a single leg
   const searchLeg = useCallback(
     async (leg: FlightLegSearch): Promise<ScoredFlight[]> => {
+      // Check if request was aborted before starting
+      if (abortControllerRef.current?.signal.aborted) {
+        throw new Error('Request was cancelled');
+      }
+
       const cacheKey = getCacheKey(leg.origin, leg.destination, leg.date);
       const cached = getFromCache(cacheKey);
       if (cached) {
         return cached;
       }
 
+      // Check if same request is already in progress
+      const activeRequest = activeRequestsRef.current.get(cacheKey);
+      if (activeRequest) {
+        // Return existing promise to prevent duplicate API calls
+        return activeRequest;
+      }
+
       const effectiveCabinClass = cabinClass === "any" ? null : cabinClass;
 
-      const { data, error } = await supabase.functions.invoke("search-flights", {
-        body: {
-          origin: leg.origin,
-          destination: leg.destination,
-          departureDate: leg.date,
-          returnDate: null,
-          passengers,
-          tripType: "oneway",
-          cabinClass: effectiveCabinClass,
-          alternateAirports: preferences.alternate_airports,
-          stopsFilter,
-        },
-      });
+      // Create the search promise with retry logic
+      const searchPromise = (async () => {
+        try {
+          // Wrap API call in retry logic with exponential backoff
+          const { data, error } = await retryWithBackoff(
+            async () => {
+              const result = await supabase.functions.invoke("search-flights", {
+                body: {
+                  origin: leg.origin,
+                  destination: leg.destination,
+                  departureDate: leg.date,
+                  returnDate: null,
+                  passengers,
+                  tripType: "oneway",
+                  cabinClass: effectiveCabinClass,
+                  alternateAirports: preferences.alternate_airports,
+                  stopsFilter,
+                },
+              });
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+              // Check if request was aborted
+              if (abortControllerRef.current?.signal.aborted) {
+                throw new Error('Request was cancelled');
+              }
 
-      const rawFlights: FlightResult[] = data.flights || [];
-      const scored = scoreFlights(rawFlights, preferences, undefined, passengerBreakdown, cabinClass);
+              // Throw error to trigger retry if needed
+              if (result.error) throw result.error;
+              if (result.data?.error) throw new Error(result.data.error);
 
-      setCache(cacheKey, scored);
-      return scored;
+              return result.data;
+            },
+            {
+              maxAttempts: 3,
+              initialDelay: 1000, // 1 second
+              maxDelay: 10000, // 10 seconds max
+              shouldRetry: (error: any) => {
+                // Don't retry if cancelled
+                if (error?.message === 'Request was cancelled') {
+                  return false;
+                }
+                // Retry on network/server errors
+                const errorString = String(error?.message || error || '').toLowerCase();
+                return (
+                  errorString.includes('network') ||
+                  errorString.includes('timeout') ||
+                  errorString.includes('connection') ||
+                  error?.status >= 500
+                );
+              },
+            }
+          );
+
+          // Check if request was aborted after retries
+          if (abortControllerRef.current?.signal.aborted) {
+            throw new Error('Request was cancelled');
+          }
+
+          // Validate and sanitize flight results
+          const rawFlights: any[] = (data as any)?.flights || [];
+          const { valid, invalid, warnings } = validateFlightResults(rawFlights);
+          
+          if (invalid.length > 0) {
+            logger.warn(`Filtered out ${invalid.length} invalid flights from API response`);
+          }
+          
+          if (warnings.length > 0) {
+            logger.warn(`Found ${warnings.length} validation warnings in flight data`);
+          }
+
+          // Only score valid flights
+          const scored = scoreFlights(valid, preferences, undefined, passengerBreakdown, cabinClass);
+
+          setCache(cacheKey, scored);
+          return scored;
+        } finally {
+          // Remove from active requests when done (success or failure)
+          activeRequestsRef.current.delete(cacheKey);
+        }
+      })();
+
+      // Store the promise to prevent duplicates
+      activeRequestsRef.current.set(cacheKey, searchPromise);
+
+      return searchPromise;
     },
     [preferences, passengerBreakdown, cabinClass, stopsFilter, passengers]
   );
@@ -117,6 +199,15 @@ export const useFlightSearch = (
   // Search one-way
   const searchOneWay = useCallback(
     async (origin: string, destination: string, date: string) => {
+      // Cancel any existing search
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      
+      // Create new AbortController for this search
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       const legId = "outbound";
 
       setLegResults((prev) => ({
@@ -129,25 +220,46 @@ export const useFlightSearch = (
 
       try {
         const flights = await searchLeg({ legId, origin, destination, date });
-        setLegResults((prev) => ({
-          ...prev,
-          [legId]: { legId, flights, isLoading: false, error: null },
-        }));
+        
+        // Only update state if request wasn't aborted
+        if (!abortController.signal.aborted) {
+          setLegResults((prev) => ({
+            ...prev,
+            [legId]: { legId, flights, isLoading: false, error: null },
+          }));
 
-        if (flights.length === 0) {
-          toast.info("No flights found for this route");
-        } else {
-          toast.success(`Found ${flights.length} flight options`);
+          if (flights.length === 0) {
+            toast.info("No flights found for this route");
+          } else {
+            toast.success(`Found ${flights.length} flight options`);
+          }
         }
       } catch (err: any) {
-        const errorMsg = err.message || "Failed to search flights";
-        setLegResults((prev) => ({
-          ...prev,
-          [legId]: { legId, flights: [], isLoading: false, error: errorMsg },
-        }));
-        toast.error("Failed to search flights");
+        // Don't show error if request was cancelled
+        if (err.message === 'Request was cancelled') {
+          return;
+        }
+        
+        // Categorize error and get user-friendly message
+        const flightError = categorizeFlightError(err, `origin: ${origin}, destination: ${destination}`);
+        
+        // Only update state if request wasn't aborted
+        if (!abortController.signal.aborted) {
+          setLegResults((prev) => ({
+            ...prev,
+            [legId]: { legId, flights: [], isLoading: false, error: flightError.userMessage || flightError.message },
+          }));
+          
+          // Only show toast if there's a user message (cancelled requests have empty message)
+          if (flightError.userMessage) {
+            toast.error(flightError.userMessage);
+          }
+        }
       } finally {
-        setIsSearching(false);
+        // Only clear loading if request wasn't aborted (new search will set it)
+        if (!abortController.signal.aborted) {
+          setIsSearching(false);
+        }
       }
     },
     [searchLeg]
@@ -156,6 +268,15 @@ export const useFlightSearch = (
   // Search round-trip - Sequential: outbound first, return on-demand
   const searchRoundTrip = useCallback(
     async (origin: string, destination: string, departDate: string, returnDate: string) => {
+      // Cancel any existing search
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      
+      // Create new AbortController for this search
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       const outboundId = "outbound";
       const returnId = "return";
 
@@ -179,25 +300,44 @@ export const useFlightSearch = (
           date: departDate 
         });
         
-        setLegResults((prev) => ({
-          ...prev,
-          [outboundId]: { legId: outboundId, flights: outboundFlights, isLoading: false, error: null },
-        }));
+        // Only update state if request wasn't aborted
+        if (!abortController.signal.aborted) {
+          setLegResults((prev) => ({
+            ...prev,
+            [outboundId]: { legId: outboundId, flights: outboundFlights, isLoading: false, error: null },
+          }));
 
-        if (outboundFlights.length === 0) {
-          toast.info("No outbound flights found");
-        } else {
-          toast.success(`Found ${outboundFlights.length} outbound options. Select one to see return flights.`);
+          if (outboundFlights.length === 0) {
+            toast.info("No outbound flights found");
+          } else {
+            toast.success(`Found ${outboundFlights.length} outbound options. Select one to see return flights.`);
+          }
         }
       } catch (err: any) {
-        const errorMsg = err.message || "Failed to search outbound flights";
-        setLegResults((prev) => ({
-          ...prev,
-          [outboundId]: { legId: outboundId, flights: [], isLoading: false, error: errorMsg },
-        }));
-        toast.error("Failed to search outbound flights");
+        // Don't show error if request was cancelled
+        if (err.message === 'Request was cancelled') {
+          return;
+        }
+        
+        // Categorize error and get user-friendly message
+        const flightError = categorizeFlightError(err, `outbound: ${origin} → ${destination}`);
+        
+        // Only update state if request wasn't aborted
+        if (!abortController.signal.aborted) {
+          setLegResults((prev) => ({
+            ...prev,
+            [outboundId]: { legId: outboundId, flights: [], isLoading: false, error: flightError.userMessage || flightError.message },
+          }));
+          
+          if (flightError.userMessage) {
+            toast.error(flightError.userMessage);
+          }
+        }
       } finally {
-        setIsSearching(false);
+        // Only clear loading if request wasn't aborted
+        if (!abortController.signal.aborted) {
+          setIsSearching(false);
+        }
       }
     },
     [searchLeg]
@@ -207,6 +347,10 @@ export const useFlightSearch = (
   const searchReturnLeg = useCallback(
     async () => {
       if (!roundTripParams) return;
+
+      // Cancel any existing return search (but not outbound)
+      // Note: We don't cancel the main controller here to avoid cancelling outbound
+      // Instead, we'll check abort status in searchLeg
 
       const { origin, destination, returnDate } = roundTripParams;
       const returnId = "return";
@@ -226,25 +370,44 @@ export const useFlightSearch = (
           date: returnDate 
         });
         
-        setLegResults((prev) => ({
-          ...prev,
-          [returnId]: { legId: returnId, flights: returnFlights, isLoading: false, error: null },
-        }));
+        // Only update state if request wasn't aborted
+        if (!abortControllerRef.current?.signal.aborted) {
+          setLegResults((prev) => ({
+            ...prev,
+            [returnId]: { legId: returnId, flights: returnFlights, isLoading: false, error: null },
+          }));
 
-        if (returnFlights.length === 0) {
-          toast.info("No return flights found");
-        } else {
-          toast.success(`Found ${returnFlights.length} return options`);
+          if (returnFlights.length === 0) {
+            toast.info("No return flights found");
+          } else {
+            toast.success(`Found ${returnFlights.length} return options`);
+          }
         }
       } catch (err: any) {
-        const errorMsg = err.message || "Failed to search return flights";
-        setLegResults((prev) => ({
-          ...prev,
-          [returnId]: { legId: returnId, flights: [], isLoading: false, error: errorMsg },
-        }));
-        toast.error("Failed to search return flights");
+        // Don't show error if request was cancelled
+        if (err.message === 'Request was cancelled') {
+          return;
+        }
+        
+        // Categorize error and get user-friendly message
+        const flightError = categorizeFlightError(err, `return: ${destination} → ${origin}`);
+        
+        // Only update state if request wasn't aborted
+        if (!abortControllerRef.current?.signal.aborted) {
+          setLegResults((prev) => ({
+            ...prev,
+            [returnId]: { legId: returnId, flights: [], isLoading: false, error: flightError.userMessage || flightError.message },
+          }));
+          
+          if (flightError.userMessage) {
+            toast.error(flightError.userMessage);
+          }
+        }
       } finally {
-        setIsSearching(false);
+        // Only clear loading if request wasn't aborted
+        if (!abortControllerRef.current?.signal.aborted) {
+          setIsSearching(false);
+        }
       }
     },
     [searchLeg, roundTripParams]
@@ -253,6 +416,15 @@ export const useFlightSearch = (
   // Search multi-city (parallel with concurrency limit)
   const searchMultiCity = useCallback(
     async (segments: Array<{ origin: string; destination: string; date: string }>) => {
+      // Cancel any existing search
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      
+      // Create new AbortController for this search
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       // Initialize all legs as loading
       const initialResults: Record<string, FlightLegResult> = {};
       segments.forEach((seg, idx) => {
@@ -293,22 +465,37 @@ export const useFlightSearch = (
           updatedResults[legId] = { legId, flights: result.value, isLoading: false, error: null };
           totalFlights += result.value.length;
         } else {
-          updatedResults[legId] = {
-            legId,
-            flights: [],
-            isLoading: false,
-            error: result.reason?.message || "Failed to search this leg",
-          };
+          // Don't show error if request was cancelled
+          if (result.reason?.message === 'Request was cancelled') {
+            updatedResults[legId] = {
+              legId,
+              flights: [],
+              isLoading: false,
+              error: null,
+            };
+          } else {
+            // Categorize error for this leg
+            const flightError = categorizeFlightError(result.reason, `segment ${legId}`);
+            updatedResults[legId] = {
+              legId,
+              flights: [],
+              isLoading: false,
+              error: flightError.userMessage || flightError.message || "Failed to search this leg",
+            };
+          }
         }
       });
 
-      setLegResults(updatedResults);
-      setIsSearching(false);
+      // Only update state if request wasn't aborted
+      if (!abortController.signal.aborted) {
+        setLegResults(updatedResults);
+        setIsSearching(false);
 
-      if (totalFlights > 0) {
-        toast.success(`Found flights for ${results.filter((r) => r.result.status === "fulfilled").length} segments`);
-      } else {
-        toast.info("No flights found for the selected routes");
+        if (totalFlights > 0) {
+          toast.success(`Found flights for ${results.filter((r) => r.result.status === "fulfilled").length} segments`);
+        } else {
+          toast.info("No flights found for the selected routes");
+        }
       }
     },
     [searchLeg]
@@ -330,12 +517,22 @@ export const useFlightSearch = (
         }));
         toast.success(`Found ${flights.length} options for this leg`);
       } catch (err: any) {
-        const errorMsg = err.message || "Failed to search flights";
+        // Don't show error if request was cancelled
+        if (err.message === 'Request was cancelled') {
+          return;
+        }
+        
+        // Categorize error and get user-friendly message
+        const flightError = categorizeFlightError(err, `retry ${legId}: ${origin} → ${destination}`);
+        
         setLegResults((prev) => ({
           ...prev,
-          [legId]: { legId, flights: [], isLoading: false, error: errorMsg },
+          [legId]: { legId, flights: [], isLoading: false, error: flightError.userMessage || flightError.message },
         }));
-        toast.error("Failed to retry search");
+        
+        if (flightError.userMessage) {
+          toast.error(flightError.userMessage);
+        }
       }
     },
     [searchLeg]
@@ -343,8 +540,16 @@ export const useFlightSearch = (
 
   // Clear all results
   const clearResults = useCallback(() => {
+    // Cancel any pending searches when clearing
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    // Clear active requests
+    activeRequestsRef.current.clear();
     setLegResults({});
     setRoundTripParams(null);
+    setIsSearching(false);
   }, []);
 
   // Check if return search is pending (for sequential round-trip)
@@ -352,6 +557,16 @@ export const useFlightSearch = (
     legResults["return"]?.flights.length === 0 && 
     !legResults["return"]?.isLoading && 
     !legResults["return"]?.error;
+
+  // Cleanup: Cancel any pending requests on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   return {
     legResults,

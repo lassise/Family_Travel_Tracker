@@ -136,6 +136,8 @@ const InteractiveWorldMap = ({
   const [mapColors, setMapColors] = useState<MapColors>(loadMapColors);
   const layersInitializedRef = useRef(false);
   const initRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Quick action dialog state
   const [quickActionOpen, setQuickActionOpen] = useState(false);
@@ -309,8 +311,10 @@ const InteractiveWorldMap = ({
 
       const inMemory = countries.find((c) => c.name === countryName);
       if (inMemory) {
-        setSelectedCountry(inMemory);
-        setStateDialogOpen(true);
+        if (isMountedRef.current) {
+          setSelectedCountry(inMemory);
+          setStateDialogOpen(true);
+        }
         return;
       }
 
@@ -355,8 +359,10 @@ const InteractiveWorldMap = ({
           visitedBy: [],
         };
 
-        setSelectedCountry(hydrated);
-        setStateDialogOpen(true);
+        if (isMountedRef.current) {
+          setSelectedCountry(hydrated);
+          setStateDialogOpen(true);
+        }
       } catch (err) {
         console.error('Failed to open state tracking dialog:', err);
         toast.error('Failed to open region tracker');
@@ -392,7 +398,9 @@ const InteractiveWorldMap = ({
         flag: match?.flag || '🏳️',
         continent: match?.continent || 'Unknown',
       });
-      setQuickActionOpen(true);
+      if (isMountedRef.current) {
+        setQuickActionOpen(true);
+      }
     }
   }, [openStateTrackingDialogForIso3, visitedCountries, homeCountryISO, readOnly]);
 
@@ -416,15 +424,19 @@ const InteractiveWorldMap = ({
   const handleOpenStateTracking = useCallback((countryId: string, countryName: string) => {
     const country = countries.find(c => c.id === countryId || c.name === countryName);
     if (country) {
-      setSelectedCountry(country);
-      setStateDialogOpen(true);
+      if (isMountedRef.current) {
+        setSelectedCountry(country);
+        setStateDialogOpen(true);
+      }
     }
   }, [countries]);
 
   // Handler for opening visit details dialog (from quick action)
   const handleOpenVisitDetails = useCallback((countryId: string, countryName: string, countryCode: string) => {
     setVisitDetailsCountry({ id: countryId, name: countryName, code: countryCode });
-    setVisitDetailsOpen(true);
+    if (isMountedRef.current) {
+      setVisitDetailsOpen(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -479,7 +491,9 @@ const InteractiveWorldMap = ({
       // Retry after a short delay if container not ready
       initRetryTimeoutRef.current = setTimeout(() => {
         // Force a re-check by triggering the effect again
-        setIsMapReady(prev => prev); // This won't change anything but will help with timing
+        if (isMountedRef.current) {
+          setIsMapReady(prev => prev); // This won't change anything but will help with timing
+        }
       }, 100);
       return;
     }
@@ -504,13 +518,18 @@ const InteractiveWorldMap = ({
 
     map.current.scrollZoom.enable();
     map.current.dragPan.enable();
+    
+    // Initialize mounted state
+    isMountedRef.current = true;
 
     const initLayers = () => {
       if (!map.current) return;
 
       // Guard: avoid double-initializing layers/sources
       if (layersInitializedRef.current || map.current.getSource('countries')) {
-        setIsMapReady(true);
+        if (isMountedRef.current) {
+          setIsMapReady(true);
+        }
         return;
       }
 
@@ -614,11 +633,15 @@ const InteractiveWorldMap = ({
       });
 
       // Resize the map after initialization to ensure proper rendering
-      setTimeout(() => {
-        map.current?.resize();
+      resizeTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current && map.current) {
+          map.current.resize();
+        }
       }, 100);
 
-      setIsMapReady(true);
+      if (isMountedRef.current) {
+        setIsMapReady(true);
+      }
     };
 
     // Handle style loading errors and retry
@@ -633,7 +656,7 @@ const InteractiveWorldMap = ({
 
     // Set a timeout to detect if style never loads
     styleLoadTimeout = setTimeout(() => {
-      if (!layersInitializedRef.current && map.current) {
+      if (isMountedRef.current && !layersInitializedRef.current && map.current) {
         console.warn('Mapbox style load timeout, forcing rehydration...');
         try {
           map.current.setStyle('mapbox://styles/mapbox/light-v11');
@@ -669,8 +692,10 @@ const InteractiveWorldMap = ({
     }
 
     return () => {
+      isMountedRef.current = false;
       if (styleLoadTimeout) clearTimeout(styleLoadTimeout);
       if (initRetryTimeoutRef.current) clearTimeout(initRetryTimeoutRef.current);
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
       layersInitializedRef.current = false;
       map.current?.remove();
       map.current = null;

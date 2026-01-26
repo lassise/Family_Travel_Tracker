@@ -10,6 +10,7 @@ import { useFamilyData } from "@/hooks/useFamilyData";
 import { useTrips } from "@/hooks/useTrips";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { logger } from "@/lib/logger";
 import DiscoveryQuestions, { DiscoveryAnswers } from "./planner/DiscoveryQuestions";
 import DestinationRecommendations, { DestinationRecommendation } from "./planner/DestinationRecommendations";
 import ItineraryDisplay, { QuickItinerary } from "./planner/ItineraryDisplay";
@@ -68,11 +69,20 @@ const QuickAIPlanner = () => {
         toast({ title: "Could not generate itinerary", variant: "destructive" });
         setMode("input");
       }
-    } catch (error) {
-      console.error("Error generating itinerary:", error);
-      toast({ title: "Failed to generate itinerary", variant: "destructive" });
+    } catch (error: any) {
+      logger.error("Error generating itinerary:", error);
+      
+      // Handle specific error types
+      if (error?.message?.includes('timeout') || error?.message?.includes('TIMEOUT')) {
+        toast({ title: "Request timed out. Please try again.", variant: "destructive" });
+      } else if (error?.message?.includes('rate limit') || error?.message?.includes('RATE_LIMITED')) {
+        toast({ title: "Too many requests. Please wait a moment.", variant: "destructive" });
+      } else {
+        toast({ title: "Failed to generate itinerary", variant: "destructive" });
+      }
       setMode("input");
     } finally {
+      // Always ensure loading state is cleared
       setLoading(false);
     }
   };
@@ -105,11 +115,20 @@ const QuickAIPlanner = () => {
         toast({ title: "Could not generate recommendations", variant: "destructive" });
         setMode("input");
       }
-    } catch (error) {
-      console.error("Error generating recommendations:", error);
-      toast({ title: "Failed to generate recommendations", variant: "destructive" });
+    } catch (error: any) {
+      logger.error("Error generating recommendations:", error);
+      
+      // Handle specific error types
+      if (error?.message?.includes('timeout') || error?.message?.includes('TIMEOUT')) {
+        toast({ title: "Request timed out. Please try again.", variant: "destructive" });
+      } else if (error?.message?.includes('rate limit') || error?.message?.includes('RATE_LIMITED')) {
+        toast({ title: "Too many requests. Please wait a moment.", variant: "destructive" });
+      } else {
+        toast({ title: "Failed to generate recommendations", variant: "destructive" });
+      }
       setMode("input");
     } finally {
+      // Always ensure loading state is cleared
       setLoading(false);
     }
   };
@@ -142,10 +161,15 @@ const QuickAIPlanner = () => {
 
       setIsSaved(true);
       toast({ title: "Trip saved!", description: "You can find it in your Trips section." });
-    } catch (error) {
-      console.error("Error saving trip:", error);
-      toast({ title: "Failed to save trip", variant: "destructive" });
+    } catch (error: any) {
+      logger.error("Error saving trip:", error);
+      toast({ 
+        title: "Failed to save trip", 
+        description: error?.message || "Please try again.",
+        variant: "destructive" 
+      });
     } finally {
+      // Always ensure loading state is cleared
       setIsSaving(false);
     }
   };

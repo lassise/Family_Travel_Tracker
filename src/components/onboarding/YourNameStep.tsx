@@ -72,7 +72,7 @@ const YourNameStep = ({ onNameSaved }: YourNameStepProps) => {
           <UserCircle className="w-10 h-10 text-primary" />
         </div>
         <p className="text-muted-foreground">
-          Let's start with your name. This will be used for your personal travel statistics and profile.
+          Your name appears on your profile and in your travel stats.
         </p>
       </div>
 

@@ -5,9 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
 import { FlightTransparencyPanel } from "./FlightTransparencyPanel";
 import { ConnectionRiskIndicator } from "./ConnectionRiskIndicator";
 import { PriceAlertDialog } from "./PriceAlertDialog";
+import { AirportTooltip } from "./AirportTooltip";
 import {
   Loader2,
   AlertCircle,
@@ -38,11 +43,47 @@ import {
   Bell,
   Copy,
   ExternalLink,
+  ArrowUpDown,
+  Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ScoredFlight } from "@/lib/flightScoring";
 import { AIRLINES } from "@/lib/airportsData";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
+import { formatPrice, formatPricePerTicket } from "@/lib/priceFormatter";
+import { calculateTotalTripDuration, formatDuration } from "@/lib/flightDuration";
+
+// Helper to parse duration (ISO 8601 string or number in minutes)
+// Handles edge cases: "PT5H" (no minutes), "PT30M" (no hours), invalid formats
+const parseDuration = (duration: string | number | undefined | null): number => {
+  if (duration === null || duration === undefined) return 0;
+  if (typeof duration === 'number') {
+    return Math.max(0, Math.round(duration));
+  }
+  if (typeof duration !== 'string' || duration.trim() === '') return 0;
+  
+  try {
+    // Handle ISO 8601 format: PT5H30M, PT5H, PT30M, etc.
+    const hoursMatch = duration.match(/(\d+)H/);
+    const minutesMatch = duration.match(/(\d+)M/);
+    
+    const hours = hoursMatch ? parseInt(hoursMatch[1], 10) : 0;
+    const minutes = minutesMatch ? parseInt(minutesMatch[1], 10) : 0;
+    
+    // Validate parsed values
+    if (isNaN(hours) || isNaN(minutes) || hours < 0 || minutes < 0) {
+      logger.warn('Invalid duration format:', duration);
+      return 0;
+    }
+    
+    const totalMinutes = hours * 60 + minutes;
+    return Math.max(0, totalMinutes);
+  } catch (error) {
+    logger.warn('Error parsing duration:', duration, error);
+    return 0;
+  }
+};
 
 interface FlightLegResultsProps {
   legId: string;
@@ -70,6 +111,17 @@ interface FlightLegResultsProps {
   tripType?: "oneway" | "roundtrip" | "multicity";
   onContinueToGoogle?: () => void;
   onCopyChecklist?: () => void;
+  preferNonstop?: boolean;
+  onFilterChange?: (filters: FlightFilters) => void;
+}
+
+interface FlightFilters {
+  minPrice?: number;
+  maxPrice?: number;
+  minDepartureHour?: number;
+  maxDepartureHour?: number;
+  minArrivalHour?: number;
+  maxArrivalHour?: number;
 }
 
 // Get airline info from code
@@ -165,41 +217,139 @@ export const FlightLegResults = ({
   tripType,
   onContinueToGoogle,
   onCopyChecklist,
+  preferNonstop = false,
+  onFilterChange,
 }: FlightLegResultsProps) => {
   const [isExpanded, setIsExpanded] = useState(!isLocked && !isConfirmed);
   const [showAll, setShowAll] = useState(false);
   const [expandedFlightId, setExpandedFlightId] = useState<string | null>(null);
   const [priceAlertFlight, setPriceAlertFlight] = useState<ScoredFlight | null>(null);
+  const [sortBy, setSortBy] = useState<"best" | "price" | "duration" | "departure" | "arrival">("best");
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<FlightFilters>({});
 
-  // Sort flights to put avoided airlines at the bottom
-  const sortedFlights = [...flights].sort((a, b) => {
+  // Helper to calculate total duration for a flight
+  const getFlightDuration = (flight: ScoredFlight): number => {
+    return flight.itineraries.reduce(
+      (sum, it) =>
+        sum +
+        it.segments.reduce((s, seg) => s + parseDuration(seg.duration), 0),
+      0
+    );
+  };
+
+  // Helper to get departure time for sorting
+  const getDepartureTime = (flight: ScoredFlight): number => {
+    const firstSeg = flight.itineraries[0]?.segments[0];
+    if (!firstSeg?.departureTime) return Infinity;
+    return new Date(firstSeg.departureTime).getTime();
+  };
+
+  // Helper to get arrival time for sorting
+  const getArrivalTime = (flight: ScoredFlight): number => {
+    const lastItinerary = flight.itineraries[flight.itineraries.length - 1];
+    const lastSeg = lastItinerary?.segments[lastItinerary.segments.length - 1];
+    if (!lastSeg?.arrivalTime) return Infinity;
+    return new Date(lastSeg.arrivalTime).getTime();
+  };
+
+  // Apply filters first
+  const filteredFlights = flights.filter((flight) => {
+    // Price filter
+    if (filters.minPrice !== undefined && flight.price < filters.minPrice) return false;
+    if (filters.maxPrice !== undefined && flight.price > filters.maxPrice) return false;
+
+    // Departure time filter
+    if (filters.minDepartureHour !== undefined || filters.maxDepartureHour !== undefined) {
+      const firstSeg = flight.itineraries[0]?.segments[0];
+      if (firstSeg?.departureTime) {
+        const departureHour = new Date(firstSeg.departureTime).getHours();
+        if (filters.minDepartureHour !== undefined && departureHour < filters.minDepartureHour) return false;
+        if (filters.maxDepartureHour !== undefined && departureHour > filters.maxDepartureHour) return false;
+      }
+    }
+
+    // Arrival time filter
+    if (filters.minArrivalHour !== undefined || filters.maxArrivalHour !== undefined) {
+      const lastItinerary = flight.itineraries[flight.itineraries.length - 1];
+      const lastSeg = lastItinerary?.segments[lastItinerary.segments.length - 1];
+      if (lastSeg?.arrivalTime) {
+        const arrivalHour = new Date(lastSeg.arrivalTime).getHours();
+        if (filters.minArrivalHour !== undefined && arrivalHour < filters.minArrivalHour) return false;
+        if (filters.maxArrivalHour !== undefined && arrivalHour > filters.maxArrivalHour) return false;
+      }
+    }
+
+    return true;
+  });
+
+  // Sort flights: prioritize nonstop when preferNonstop is true, and put avoided airlines at the bottom
+  // Then apply user-selected sort option
+  const sortedFlights = [...filteredFlights].sort((a, b) => {
     const aAirline = a.itineraries[0]?.segments[0]?.airline || "";
     const bAirline = b.itineraries[0]?.segments[0]?.airline || "";
     const aAvoided = isAvoidedAirline(aAirline) || a.isAvoidedAirline;
     const bAvoided = isAvoidedAirline(bAirline) || b.isAvoidedAirline;
     
-    // Avoided airlines go to the bottom
+    // First: Avoided airlines go to the bottom
     if (aAvoided && !bAvoided) return 1;
     if (!aAvoided && bAvoided) return -1;
     
-    // Within same category, maintain score order
+    // Second: When preferNonstop is true, prioritize nonstop flights (similar to avoided airlines logic)
+    if (preferNonstop) {
+      const aIsNonstop = a.itineraries.every(it => it.segments.length === 1);
+      const bIsNonstop = b.itineraries.every(it => it.segments.length === 1);
+      
+      // Nonstop flights come before layover flights
+      if (aIsNonstop && !bIsNonstop) return -1;
+      if (!aIsNonstop && bIsNonstop) return 1;
+    }
+    
+    // Third: Apply user-selected sort option
+    if (sortBy === "price") {
+      return a.price - b.price; // Lowest price first
+    } else if (sortBy === "duration") {
+      const aDur = getFlightDuration(a);
+      const bDur = getFlightDuration(b);
+      return aDur - bDur; // Shortest duration first
+    } else if (sortBy === "departure") {
+      const aTime = getDepartureTime(a);
+      const bTime = getDepartureTime(b);
+      return aTime - bTime; // Earliest departure first
+    } else if (sortBy === "arrival") {
+      const aTime = getArrivalTime(a);
+      const bTime = getArrivalTime(b);
+      return aTime - bTime; // Earliest arrival first
+    }
+    
+    // Default: sort by score (best match)
     return b.score - a.score;
   });
   
   const displayedFlights = showAll ? sortedFlights : sortedFlights.slice(0, 5);
 
-  // Quick categories
+  // Calculate price range for filters (use original flights, not filtered)
+  const priceRange = useMemo(() => {
+    if (flights.length === 0) return { min: 0, max: 1000 };
+    const prices = flights.map(f => f.price);
+    return {
+      min: Math.min(...prices),
+      max: Math.max(...prices),
+    };
+  }, [flights]);
+
+  // Quick categories (use filtered flights for badges)
   const nonAvoidedFlights = useMemo(
     () =>
-      sortedFlights.filter((f) => {
+      filteredFlights.filter((f) => {
         const code = f.itineraries[0]?.segments[0]?.airline || "";
         return !(isAvoidedAirline(code) || f.isAvoidedAirline);
       }),
-    [sortedFlights, isAvoidedAirline]
+    [filteredFlights, isAvoidedAirline]
   );
 
   // Prefer to feature non-avoided flights in the top badges; fall back if all are avoided.
-  const featuredFlights = nonAvoidedFlights.length > 0 ? nonAvoidedFlights : sortedFlights;
+  const featuredFlights = nonAvoidedFlights.length > 0 ? nonAvoidedFlights : filteredFlights;
 
   const bestOverall = featuredFlights[0];
   const cheapest =
@@ -210,18 +360,33 @@ export const FlightLegResults = ({
           const aDur = a.itineraries.reduce(
             (sum, it) =>
               sum +
-              it.segments.reduce((s, seg) => s + (typeof seg.duration === "number" ? seg.duration : 0), 0),
+              it.segments.reduce((s, seg) => s + parseDuration(seg.duration), 0),
             0
           );
           const bDur = b.itineraries.reduce(
             (sum, it) =>
               sum +
-              it.segments.reduce((s, seg) => s + (typeof seg.duration === "number" ? seg.duration : 0), 0),
+              it.segments.reduce((s, seg) => s + parseDuration(seg.duration), 0),
             0
           );
           return aDur - bDur;
         })[0]
       : null;
+  
+  // Find most eco-friendly flight (lowest carbon emissions)
+  const mostEcoFriendly = featuredFlights.length > 0
+    ? [...featuredFlights]
+        .filter(f => f.carbonEmissions && f.carbonEmissions > 0)
+        .sort((a, b) => (a.carbonEmissions || Infinity) - (b.carbonEmissions || Infinity))[0]
+    : null;
+  
+  // Calculate average carbon emissions for comparison
+  const avgCarbonEmissions = useMemo(() => {
+    const flightsWithEmissions = filteredFlights.filter(f => f.carbonEmissions && f.carbonEmissions > 0);
+    if (flightsWithEmissions.length === 0) return null;
+    const sum = flightsWithEmissions.reduce((acc, f) => acc + (f.carbonEmissions || 0), 0);
+    return sum / flightsWithEmissions.length;
+  }, [filteredFlights]);
 
   if (isLoading) {
     return (
@@ -272,9 +437,30 @@ export const FlightLegResults = ({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No flights found for this route on {date}
-          </p>
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+              <Plane className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2">
+              No Flights Found
+            </h3>
+            <p className="text-sm text-muted-foreground max-w-md mb-4">
+              We couldn't find any flights for {origin} → {destination} on {formatDate(date)}.
+            </p>
+            <div className="space-y-2 text-xs text-muted-foreground mb-4">
+              <p className="font-medium text-foreground">Try:</p>
+              <ul className="list-disc list-inside space-y-1 text-left">
+                <li>Checking nearby dates (±3 days)</li>
+                <li>Using alternate airports</li>
+                <li>Removing the "nonstop only" filter</li>
+                <li>Adjusting your cabin class preference</li>
+              </ul>
+            </div>
+            <Button variant="outline" size="sm" onClick={onRetry} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Try Again
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
@@ -336,7 +522,9 @@ export const FlightLegResults = ({
               <div className="flex items-center gap-3">
                 <div className="text-center">
                   <p className="font-semibold">{formatTime(selectedFirstSeg?.departureTime || "")}</p>
-                  <p className="text-xs text-muted-foreground">{selectedFirstSeg?.departureAirport}</p>
+                  <AirportTooltip code={selectedFirstSeg?.departureAirport || ""}>
+                    <p className="text-xs text-muted-foreground cursor-help">{selectedFirstSeg?.departureAirport}</p>
+                  </AirportTooltip>
                 </div>
                 <div className="flex-1 flex flex-col items-center px-2">
                   <span className="text-xs text-muted-foreground">
@@ -352,12 +540,14 @@ export const FlightLegResults = ({
                 </div>
                 <div className="text-center">
                   <p className="font-semibold">{formatTime(selectedLastSeg?.arrivalTime || "")}</p>
-                  <p className="text-xs text-muted-foreground">{selectedLastSeg?.arrivalAirport}</p>
+                  <AirportTooltip code={selectedLastSeg?.arrivalAirport || ""}>
+                    <p className="text-xs text-muted-foreground cursor-help">{selectedLastSeg?.arrivalAirport}</p>
+                  </AirportTooltip>
                 </div>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-xl font-bold text-primary">${selectedFlight.price}</p>
+              <p className="text-xl font-bold text-primary">{formatPrice(selectedFlight.price)}</p>
             </div>
           </div>
           <Button 
@@ -396,7 +586,7 @@ export const FlightLegResults = ({
 • Arrives: ${formatTime(selectedLastSeg?.arrivalTime || "")} at ${selectedLastSeg?.arrivalAirport || destination}
 • Stops: ${selectedStops === 0 ? "Nonstop" : `${selectedStops} stop${selectedStops > 1 ? "s" : ""}`}
 • Duration: ${Math.floor(selectedDuration / 60)}h ${selectedDuration % 60}m
-• Price: $${selectedFlight.price}`}
+• Price: ${formatPrice(selectedFlight.price)}`}
                     </div>
                     <Button
                       variant="secondary"
@@ -409,7 +599,7 @@ export const FlightLegResults = ({
 • Arrives: ${formatTime(selectedLastSeg?.arrivalTime || "")} at ${selectedLastSeg?.arrivalAirport || destination}
 • Stops: ${selectedStops === 0 ? "Nonstop" : `${selectedStops} stop${selectedStops > 1 ? "s" : ""}`}
 • Duration: ${Math.floor(selectedDuration / 60)}h ${selectedDuration % 60}m
-• Price: $${selectedFlight.price}`;
+• Price: ${formatPrice(selectedFlight.price)}`;
                         navigator.clipboard.writeText(checklist);
                         toast.success("Checklist copied to clipboard");
                         if (onCopyChecklist) onCopyChecklist();
@@ -510,12 +700,12 @@ export const FlightLegResults = ({
             <div className="flex flex-wrap gap-2">
               {bestOverall && (
                 <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/30">
-                  <Star className="h-3 w-3" /> Best Match: ${bestOverall.price}
+                  <Star className="h-3 w-3" /> Best Match: {formatPrice(bestOverall.price)}
                 </Badge>
               )}
               {cheapest && cheapest.id !== bestOverall?.id && (
                 <Badge variant="outline" className="text-xs gap-1 bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-400">
-                  <DollarSign className="h-3 w-3" /> Cheapest: ${cheapest.price}
+                  <DollarSign className="h-3 w-3" /> Cheapest: {formatPrice(cheapest.price)}
                 </Badge>
               )}
               {fastest && fastest.id !== bestOverall?.id && (
@@ -525,21 +715,197 @@ export const FlightLegResults = ({
               )}
             </div>
 
+            {/* Sort and Filter controls */}
+            <div className="flex items-center justify-between gap-3 mb-2">
+              {/* Sort dropdown */}
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+                  <SelectTrigger className="w-[160px] h-8 text-xs">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="best">Best Match</SelectItem>
+                    <SelectItem value="price">Price (Lowest)</SelectItem>
+                    <SelectItem value="duration">Duration (Fastest)</SelectItem>
+                    <SelectItem value="departure">Departure (Earliest)</SelectItem>
+                    <SelectItem value="arrival">Arrival (Earliest)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Filter toggle */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className="gap-2"
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+                {(filters.minPrice !== undefined || filters.maxPrice !== undefined || 
+                  filters.minDepartureHour !== undefined || filters.maxDepartureHour !== undefined ||
+                  filters.minArrivalHour !== undefined || filters.maxArrivalHour !== undefined) && (
+                  <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+                    Active
+                  </Badge>
+                )}
+              </Button>
+            </div>
+
+            {/* Filter panel */}
+            {showFilters && (
+              <Card className="mb-4 border-primary/20 bg-muted/30">
+                <CardContent className="pt-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">Filter Results</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setFilters({});
+                        onFilterChange?.({});
+                      }}
+                      className="h-7 text-xs"
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+
+                  {/* Price Range Filter */}
+                  <div className="space-y-2">
+                    <Label className="text-xs">Price Range</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-1">Min Price</Label>
+                        <Input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.minPrice || ""}
+                          onChange={(e) => {
+                            const newFilters = { ...filters, minPrice: e.target.value ? Number(e.target.value) : undefined };
+                            setFilters(newFilters);
+                            onFilterChange?.(newFilters);
+                          }}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-1">Max Price</Label>
+                        <Input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.maxPrice || ""}
+                          onChange={(e) => {
+                            const newFilters = { ...filters, maxPrice: e.target.value ? Number(e.target.value) : undefined };
+                            setFilters(newFilters);
+                            onFilterChange?.(newFilters);
+                          }}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Range: {formatPrice(priceRange.min)} - {formatPrice(priceRange.max)}
+                    </p>
+                  </div>
+
+                  {/* Departure Time Filter */}
+                  <div className="space-y-2">
+                    <Label className="text-xs">Departure Time</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-1">From (24h)</Label>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          min="0"
+                          max="23"
+                          value={filters.minDepartureHour !== undefined ? filters.minDepartureHour : ""}
+                          onChange={(e) => {
+                            const newFilters = { ...filters, minDepartureHour: e.target.value ? Number(e.target.value) : undefined };
+                            setFilters(newFilters);
+                            onFilterChange?.(newFilters);
+                          }}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-1">To (24h)</Label>
+                        <Input
+                          type="number"
+                          placeholder="23"
+                          min="0"
+                          max="23"
+                          value={filters.maxDepartureHour !== undefined ? filters.maxDepartureHour : ""}
+                          onChange={(e) => {
+                            const newFilters = { ...filters, maxDepartureHour: e.target.value ? Number(e.target.value) : undefined };
+                            setFilters(newFilters);
+                            onFilterChange?.(newFilters);
+                          }}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Arrival Time Filter */}
+                  <div className="space-y-2">
+                    <Label className="text-xs">Arrival Time</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-1">From (24h)</Label>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          min="0"
+                          max="23"
+                          value={filters.minArrivalHour !== undefined ? filters.minArrivalHour : ""}
+                          onChange={(e) => {
+                            const newFilters = { ...filters, minArrivalHour: e.target.value ? Number(e.target.value) : undefined };
+                            setFilters(newFilters);
+                            onFilterChange?.(newFilters);
+                          }}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-1">To (24h)</Label>
+                        <Input
+                          type="number"
+                          placeholder="23"
+                          min="0"
+                          max="23"
+                          value={filters.maxArrivalHour !== undefined ? filters.maxArrivalHour : ""}
+                          onChange={(e) => {
+                            const newFilters = { ...filters, maxArrivalHour: e.target.value ? Number(e.target.value) : undefined };
+                            setFilters(newFilters);
+                            onFilterChange?.(newFilters);
+                          }}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground pt-2 border-t">
+                    Showing {filteredFlights.length} of {flights.length} flights
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Flight options */}
             {displayedFlights.map((flight, idx) => {
               const firstSeg = flight.itineraries[0]?.segments[0];
               const lastSeg =
                 flight.itineraries[0]?.segments[flight.itineraries[0]?.segments.length - 1];
               const stops = (flight.itineraries[0]?.segments.length || 1) - 1;
-              const duration = flight.itineraries.reduce(
-                (sum, it) =>
-                  sum +
-                  it.segments.reduce(
-                    (s, seg) => s + (typeof seg.duration === "number" ? seg.duration : 0),
-                    0
-                  ),
-                0
-              );
+              
+              // Calculate total trip duration (includes layovers)
+              // This gives the true door-to-door time
+              const duration = calculateTotalTripDuration(flight);
+              
               const isSelected = flight.id === selectedFlightId;
               const flightAirline = firstSeg?.airline || "";
               const isAvoided = isAvoidedAirline(flightAirline);
@@ -548,16 +914,66 @@ export const FlightLegResults = ({
               const isFlightExpanded = expandedFlightId === flight.id;
               const isBasic = isBasicEconomy(flight);
 
-              // Calculate layover info for connection risk
-              let layoverMinutes = 0;
+              // Calculate layover info for ALL connections (not just first)
+              // This handles multi-layover flights correctly
+              const layovers: Array<{ minutes: number; airport: string; overnight: boolean }> = [];
+              let totalLayoverMinutes = 0;
               let hasTerminalChange = false;
+              
               if (stops > 0 && flight.itineraries[0]?.segments.length > 1) {
-                const seg1 = flight.itineraries[0].segments[0];
-                const seg2 = flight.itineraries[0].segments[1];
-                const arrival = new Date(seg1.arrivalTime);
-                const departure = new Date(seg2.departureTime);
-                layoverMinutes = (departure.getTime() - arrival.getTime()) / (1000 * 60);
+                const segments = flight.itineraries[0].segments;
+                for (let i = 0; i < segments.length - 1; i++) {
+                  const seg1 = segments[i];
+                  const seg2 = segments[i + 1];
+                  
+                  if (seg1?.arrivalTime && seg2?.departureTime) {
+                    try {
+                      const arrival = new Date(seg1.arrivalTime);
+                      const departure = new Date(seg2.departureTime);
+                      
+                      // Validate dates
+                      if (isNaN(arrival.getTime()) || isNaN(departure.getTime())) {
+                        logger.warn('Invalid date in flight segment:', { seg1: seg1.arrivalTime, seg2: seg2.departureTime });
+                        continue;
+                      }
+                      
+                      const layoverMs = departure.getTime() - arrival.getTime();
+                      const layoverMins = Math.round(layoverMs / (1000 * 60));
+                      
+                      // Handle negative layovers (timezone issues or data errors)
+                      if (layoverMins < 0) {
+                        logger.warn('Negative layover detected, possible timezone issue:', {
+                          arrival: seg1.arrivalTime,
+                          departure: seg2.departureTime,
+                          minutes: layoverMins
+                        });
+                        // For negative layovers, assume minimum connection time
+                        layovers.push({
+                          minutes: 60, // Assume 1 hour minimum
+                          airport: seg1.arrivalAirport || 'Unknown',
+                          overnight: false
+                        });
+                        totalLayoverMinutes += 60;
+                      } else {
+                        // Check for overnight layover (more than 12 hours)
+                        const overnight = layoverMins > 12 * 60;
+                        layovers.push({
+                          minutes: layoverMins,
+                          airport: seg1.arrivalAirport || 'Unknown',
+                          overnight
+                        });
+                        totalLayoverMinutes += layoverMins;
+                      }
+                    } catch (error) {
+                      logger.error('Error calculating layover:', error);
+                      // Continue with next layover
+                    }
+                  }
+                }
               }
+              
+              // Use first layover for connection risk indicator (backward compatibility)
+              const layoverMinutes = layovers.length > 0 ? layovers[0].minutes : 0;
 
               const positiveMatches = flight.preferenceMatches.filter(m => m.type === 'positive');
               const negativeMatches = flight.preferenceMatches.filter(m => m.type === 'negative');
@@ -633,6 +1049,11 @@ export const FlightLegResults = ({
                               <Zap className="h-2.5 w-2.5" /> Fastest
                             </Badge>
                           )}
+                          {flight.id === mostEcoFriendly?.id && flight.carbonEmissions && idx !== 0 && (
+                            <Badge variant="secondary" className="text-[10px] gap-1 bg-green-100 text-green-700 border-green-300 dark:bg-green-900/20 dark:text-green-400">
+                              <Leaf className="h-2.5 w-2.5" /> Lowest CO₂
+                            </Badge>
+                          )}
                           {isBasic && (
                             <Badge variant="outline" className="text-[10px] bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400">
                               Basic Economy
@@ -644,7 +1065,9 @@ export const FlightLegResults = ({
                         <div className="flex items-center gap-3">
                           <div className="text-center">
                             <p className="text-lg font-semibold">{formatTime(firstSeg?.departureTime || "")}</p>
-                            <p className="text-xs text-muted-foreground">{firstSeg?.departureAirport}</p>
+                            <AirportTooltip code={firstSeg?.departureAirport || ""}>
+                              <p className="text-xs text-muted-foreground cursor-help">{firstSeg?.departureAirport}</p>
+                            </AirportTooltip>
                           </div>
                           
                           <div className="flex-1 flex flex-col items-center px-2">
@@ -670,18 +1093,39 @@ export const FlightLegResults = ({
                           
                           <div className="text-center">
                             <p className="text-lg font-semibold">{formatTime(lastSeg?.arrivalTime || "")}</p>
-                            <p className="text-xs text-muted-foreground">{lastSeg?.arrivalAirport}</p>
+                            <AirportTooltip code={lastSeg?.arrivalAirport || ""}>
+                              <p className="text-xs text-muted-foreground cursor-help">{lastSeg?.arrivalAirport}</p>
+                            </AirportTooltip>
                           </div>
                         </div>
 
-                        {/* Connection risk for stops */}
-                        {stops > 0 && layoverMinutes > 0 && (
-                          <div className="mt-2">
-                            <ConnectionRiskIndicator 
-                              layoverMinutes={layoverMinutes}
-                              hasTerminalChange={hasTerminalChange}
-                              className="text-[10px]"
-                            />
+                        {/* Connection risk for stops - show worst layover */}
+                        {stops > 0 && layovers.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {/* Show risk indicator for shortest layover (most risky) */}
+                            {layovers.length > 0 && (
+                              <ConnectionRiskIndicator 
+                                layoverMinutes={Math.min(...layovers.map(l => l.minutes))}
+                                hasTerminalChange={hasTerminalChange}
+                                className="text-[10px]"
+                              />
+                            )}
+                            {/* Show all layovers if multiple */}
+                            {layovers.length > 1 && (
+                              <div className="text-[10px] text-muted-foreground mt-1">
+                                {layovers.map((layover, idx) => (
+                                  <div key={idx} className="flex items-center gap-1">
+                                    <Clock className="h-2.5 w-2.5" />
+                                    <span>
+                                      <AirportTooltip code={layover.airport}>
+                                        <span className="cursor-help">{layover.airport}</span>
+                                      </AirportTooltip>: {Math.floor(layover.minutes / 60)}h {layover.minutes % 60}m
+                                      {layover.overnight && ' (overnight)'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -738,10 +1182,10 @@ export const FlightLegResults = ({
 
                       {/* Price and score */}
                       <div className="text-right flex-shrink-0">
-                        <p className="text-xl font-bold text-primary">${flight.price}</p>
+                        <p className="text-xl font-bold text-primary">{formatPrice(flight.price)}</p>
                         {flight.pricePerTicket && flight.passengers && flight.passengers > 1 && (
                           <p className="text-[10px] text-muted-foreground">
-                            ${Math.round(flight.pricePerTicket)}/person
+                            {formatPricePerTicket(flight.price, flight.passengers)}
                           </p>
                         )}
                         
@@ -774,6 +1218,47 @@ export const FlightLegResults = ({
                             {flight.priceInsight.level === 'high' && <TrendingUp className="h-3 w-3" />}
                             {flight.priceInsight.label}
                           </div>
+                        )}
+
+                        {/* Carbon emissions */}
+                        {flight.carbonEmissions && flight.carbonEmissions > 0 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className={cn(
+                                "flex items-center justify-end gap-1 mt-1 text-[10px]",
+                                avgCarbonEmissions && flight.carbonEmissions < avgCarbonEmissions * 0.9
+                                  ? "text-green-600 dark:text-green-400"
+                                  : avgCarbonEmissions && flight.carbonEmissions > avgCarbonEmissions * 1.1
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-muted-foreground"
+                              )}>
+                                <Leaf className="h-3 w-3" />
+                                {Math.round(flight.carbonEmissions)} kg CO₂
+                                {avgCarbonEmissions && (
+                                  <span className="text-[9px]">
+                                    {flight.carbonEmissions < avgCarbonEmissions * 0.9 && " (below avg)"}
+                                    {flight.carbonEmissions > avgCarbonEmissions * 1.1 && " (above avg)"}
+                                  </span>
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="space-y-1">
+                                <p className="font-medium">Carbon Emissions: {Math.round(flight.carbonEmissions)} kg CO₂</p>
+                                {avgCarbonEmissions && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Average: {Math.round(avgCarbonEmissions)} kg CO₂
+                                    {flight.carbonEmissions < avgCarbonEmissions && (
+                                      <span className="text-green-600"> ({Math.round(((avgCarbonEmissions - flight.carbonEmissions) / avgCarbonEmissions) * 100)}% lower)</span>
+                                    )}
+                                    {flight.carbonEmissions > avgCarbonEmissions && (
+                                      <span className="text-amber-600"> ({Math.round(((flight.carbonEmissions - avgCarbonEmissions) / avgCarbonEmissions) * 100)}% higher)</span>
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
                         )}
 
                         {isSelected && (

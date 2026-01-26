@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import { 
   Plane, 
   Bell, 
@@ -80,7 +81,7 @@ const SavedFlights = () => {
       if (error) throw error;
       setSavedFlights(data || []);
     } catch (error) {
-      console.error("Error fetching saved flights:", error);
+      logger.error("Error fetching saved flights:", error);
       toast.error("Failed to load saved flights");
     } finally {
       setLoading(false);
@@ -102,7 +103,7 @@ const SavedFlights = () => {
 
       toast.success(`Price alerts ${!currentValue ? "enabled" : "disabled"}`);
     } catch (error) {
-      console.error("Error toggling alert:", error);
+      logger.error("Error toggling alert:", error);
       toast.error("Failed to update alert setting");
     }
   };
@@ -126,7 +127,7 @@ const SavedFlights = () => {
       setSavedFlights(prev => prev.filter(f => f.id !== flightToDelete));
       toast.success("Saved flight removed");
     } catch (error) {
-      console.error("Error deleting flight:", error);
+      logger.error("Error deleting flight:", error);
       toast.error("Failed to delete saved flight");
     } finally {
       setDeleteDialogOpen(false);

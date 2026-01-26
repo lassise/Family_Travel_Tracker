@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import { Loader2, Play, ArrowLeft, Plane } from "lucide-react";
 // import { Logo } from "@/components/common/Logo";
 import { z } from "zod";
@@ -187,7 +188,7 @@ const Auth = () => {
         navigate("/");
       }
     } catch (error) {
-      console.error("Demo login error:", error);
+      logger.error("Demo login error:", error);
       toast.error(error instanceof Error ? error.message : "Demo login failed");
     } finally {
       setDemoLoading(false);

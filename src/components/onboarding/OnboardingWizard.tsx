@@ -31,20 +31,20 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   // Family members MUST come before countries so we can associate visits
   const steps = [
     {
-      title: "Welcome to Your Travel Companion!",
-      description: "Track your adventures around the world — solo or with family.",
+      title: "Welcome",
+      description: "A quick overview of what you can do.",
       icon: Sparkles,
       component: <WelcomeFeaturesStep />,
     },
     {
       title: "What's Your Name?",
-      description: "Let's personalize your experience.",
+      description: "We'll use this for your profile and stats.",
       icon: User,
       component: <YourNameStep onNameSaved={setUserName} />,
     },
     {
       title: "Where's Home?",
-      description: "Select your home country. It will be displayed on the map but won't count as visited.",
+      description: "Shown on the map; it won't count as visited.",
       icon: Home,
       component: (
         <HomeCountryStep 
@@ -54,7 +54,7 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
     },
     {
       title: "Who's Traveling?",
-      description: "Add yourself first, then add anyone else you'd like to track travels for.",
+      description: "Add yourself, then anyone you track travels for.",
       icon: Users,
       component: (
         <FamilyMembersStep 
@@ -66,7 +66,7 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
     },
     {
       title: "Countries You've Visited",
-      description: "Add countries you've already explored. You can add details later.",
+      description: "Add places you've been. You can add more anytime.",
       icon: Globe,
       component: (
         <CountriesStep 
@@ -76,7 +76,7 @@ const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
     },
     {
       title: "Travel Preferences",
-      description: "Help us personalize your experience with a few quick questions.",
+      description: "Budget, pace & interests — used for AI recommendations.",
       icon: Heart,
       component: <TravelPreferencesStep />,
     },

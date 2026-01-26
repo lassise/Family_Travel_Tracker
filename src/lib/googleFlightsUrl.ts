@@ -1,5 +1,6 @@
 // Google Flights deep link builder for all trip types
 import { AIRLINES } from "./airportsData";
+import { logger } from "./logger";
 
 export interface GoogleFlightsParams {
   tripType: "oneway" | "roundtrip" | "multicity";
@@ -249,7 +250,7 @@ export const buildGoogleFlightsUrl = (params: GoogleFlightsParams): string => {
       if (segments && segments.length > 0) {
         // Multi-city airline filtering may not be fully supported, but we'll try
         if (normalizedAirlineCode) {
-          console.warn("Airline filtering for multi-city trips may not be fully supported by Google Flights URL format");
+          logger.warn("Airline filtering for multi-city trips may not be fully supported by Google Flights URL format");
         }
         return buildMultiCityUrl(segments, passengers, cabinClass, normalizedAirlineCode);
       }
@@ -308,7 +309,7 @@ export const logBookingEvent = (
   eventType: "oneway" | "roundtrip" | "multicity",
   details: Record<string, any>
 ): void => {
-  console.log(`[Flight Booking] ${eventType}`, details);
+  logger.log(`[Flight Booking] ${eventType}`, details);
   
   // In a real app, you'd send this to an analytics service
   // Example: analytics.track(`flight_booking_${eventType}_clicked`, details);

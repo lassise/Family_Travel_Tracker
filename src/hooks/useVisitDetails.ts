@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 
 export interface VisitDetail {
   id: string;
@@ -67,26 +68,44 @@ export const useVisitDetails = () => {
       if (citiesResult.error) throw citiesResult.error;
       if (settingsResult.error) throw settingsResult.error;
 
-      setVisitDetails(visitsResult.data || []);
-      setCityVisits(citiesResult.data || []);
-      setTravelSettings(settingsResult.data);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setVisitDetails(visitsResult.data || []);
+        setCityVisits(citiesResult.data || []);
+        setTravelSettings(settingsResult.data);
+      }
     } catch (error) {
-      console.error("Error fetching visit details:", error);
+      logger.error("Error fetching visit details:", error);
     } finally {
-      setLoading(false);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
       isFetching.current = false;
       isInitialLoad.current = false;
     }
   }, []);
 
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  // Store debounce timer in ref to avoid stale closures
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
+    isMountedRef.current = true;
     fetchData();
 
     // Debounce realtime updates
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const debouncedFetch = () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(fetchData, 300);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        // Only fetch if component is still mounted
+        if (isMountedRef.current) {
+          fetchData();
+        }
+      }, 300);
     };
 
     const channel = supabase
@@ -97,10 +116,15 @@ export const useVisitDetails = () => {
       .subscribe();
 
     return () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
+      isMountedRef.current = false;
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
-  }, [fetchData]);
+    // fetchData is stable (no dependencies), so we don't need it in deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Memoize getCountrySummary
   const getCountrySummary = useCallback((countryId: string): CountryVisitSummary => {

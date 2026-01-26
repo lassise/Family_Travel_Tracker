@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import TripCollaboratorsDialog from "@/components/trips/TripCollaboratorsDialog";
 import { CustomActivityDialog } from "@/components/trips/CustomActivityDialog";
 import ActivityBookingCard from "@/components/trips/ActivityBookingCard";
@@ -200,7 +201,7 @@ const TripDetail = () => {
         setLodgingSuggestions(lodgingData);
       }
     } catch (error: any) {
-      console.error("Error fetching trip:", error);
+      logger.error("Error fetching trip:", error);
       toast.error("Failed to load trip");
     } finally {
       setLoading(false);

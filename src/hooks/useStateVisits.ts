@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 
 export interface StateVisit {
   id: string;
@@ -19,8 +20,11 @@ export const useStateVisits = (countryCode?: string) => {
 
   const fetchStateVisits = useCallback(async () => {
     if (!user) {
-      setStateVisits([]);
-      setLoading(false);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setStateVisits([]);
+        setLoading(false);
+      }
       return;
     }
 
@@ -38,11 +42,17 @@ export const useStateVisits = (countryCode?: string) => {
       const { data, error } = await query;
 
       if (error) throw error;
-      setStateVisits(data || []);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setStateVisits(data || []);
+      }
     } catch (error) {
-      console.error("Error fetching state visits:", error);
+      logger.error("Error fetching state visits:", error);
     } finally {
-      setLoading(false);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [user, countryCode]);
 
@@ -72,7 +82,7 @@ export const useStateVisits = (countryCode?: string) => {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error("Error adding state visit:", error);
+      logger.error("Error adding state visit:", error);
       return null;
     }
   }, [user]);
@@ -91,7 +101,7 @@ export const useStateVisits = (countryCode?: string) => {
       if (error) throw error;
       return true;
     } catch (error) {
-      console.error("Error removing state visit:", error);
+      logger.error("Error removing state visit:", error);
       return false;
     }
   }, [user]);
@@ -114,7 +124,11 @@ export const useStateVisits = (countryCode?: string) => {
     }
   }, [stateVisits, addStateVisit, removeStateVisit]);
 
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+
   useEffect(() => {
+    isMountedRef.current = true;
     fetchStateVisits();
 
     // Set up realtime subscription
@@ -123,14 +137,22 @@ export const useStateVisits = (countryCode?: string) => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'state_visits' },
-        () => fetchStateVisits()
+        () => {
+          // Only fetch if component is still mounted
+          if (isMountedRef.current) {
+            fetchStateVisits();
+          }
+        }
       )
       .subscribe();
 
     return () => {
+      isMountedRef.current = false;
       supabase.removeChannel(channel);
     };
-  }, [user, countryCode, fetchStateVisits]);
+    // Only depend on user and countryCode, not fetchStateVisits
+    // fetchStateVisits is stable due to useCallback with these dependencies
+  }, [user, countryCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Get visited state codes for a specific country
   const getVisitedStateCodes = useCallback((cc: string) => {

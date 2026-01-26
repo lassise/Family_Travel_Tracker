@@ -70,8 +70,8 @@ const HomeCountryStep = ({ onHomeCountryChange }: HomeCountryStepProps) => {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-muted-foreground">
-        <Home className="w-4 h-4" />
-        <span className="text-sm">Select your home country - it will be shown on the map but won't count towards your travel stats.</span>
+        <Home className="w-4 h-4 shrink-0" />
+        <span className="text-sm">Select from the list below.</span>
       </div>
 
       <div className="space-y-2">

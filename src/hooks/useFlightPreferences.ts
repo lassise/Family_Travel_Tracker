@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 
 export interface HomeAirport {
   code: string;
@@ -190,7 +191,7 @@ export const useFlightPreferences = () => {
         });
       }
     } catch (error) {
-      console.error("Error fetching flight preferences:", error);
+      logger.error("Error fetching flight preferences:", error);
     } finally {
       setLoading(false);
       isFetching.current = false;
@@ -240,7 +241,7 @@ export const useFlightPreferences = () => {
         });
       }
     } catch (error) {
-      console.error("Error creating default preferences:", error);
+      logger.error("Error creating default preferences:", error);
     }
   }, [user?.id]);
 
@@ -277,7 +278,7 @@ export const useFlightPreferences = () => {
 
       if (error) throw error;
     } catch (error) {
-      console.error("Error updating preferences:", error);
+      logger.error("Error updating preferences:", error);
       toast.error("Failed to save preferences");
     }
   }, [user?.id, preferences]);

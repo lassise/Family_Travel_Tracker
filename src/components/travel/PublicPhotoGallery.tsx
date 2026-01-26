@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Country } from '@/hooks/useFamilyData';
-import { Image as ImageIcon } from 'lucide-react';
+import { Camera, Image as ImageIcon } from 'lucide-react';
 
 interface PublicPhotoGalleryProps {
   countries: Country[];
@@ -21,17 +21,17 @@ const PublicPhotoGallery = ({ countries, photos }: PublicPhotoGalleryProps) => {
 
   if (photos.length === 0) {
     return (
-      <Card>
+      <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ImageIcon className="h-5 w-5" />
-            Photo Gallery
+          <CardTitle className="flex items-center gap-2 text-foreground">
+            <Camera className="h-5 w-5 text-primary" />
+            Travel Photos
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-12 text-muted-foreground">
             <ImageIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>No photos to display yet</p>
+            <p>No photos yet. Start capturing your travel memories!</p>
           </div>
         </CardContent>
       </Card>
@@ -39,11 +39,11 @@ const PublicPhotoGallery = ({ countries, photos }: PublicPhotoGalleryProps) => {
   }
 
   return (
-    <Card>
+    <Card className="bg-card border-border">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ImageIcon className="h-5 w-5" />
-          Photo Gallery
+        <CardTitle className="flex items-center gap-2 text-foreground">
+          <Camera className="h-5 w-5 text-primary" />
+          Travel Photos
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -51,7 +51,7 @@ const PublicPhotoGallery = ({ countries, photos }: PublicPhotoGalleryProps) => {
           {photos.map((photo) => (
             <div 
               key={photo.id}
-              className="relative group aspect-square rounded-lg overflow-hidden"
+              className="relative group aspect-square rounded-lg overflow-hidden cursor-pointer"
             >
               <img 
                 src={photo.photo_url} 

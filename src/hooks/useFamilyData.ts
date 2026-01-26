@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 
 export interface FamilyMember {
   id: string;
@@ -32,11 +33,14 @@ export const useFamilyData = () => {
 
   const fetchData = useCallback(async () => {
     if (!user) {
-      setFamilyMembers([]);
-      setCountries([]);
-      setWishlist([]);
-      setHomeCountry(null);
-      setLoading(false);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setFamilyMembers([]);
+        setCountries([]);
+        setWishlist([]);
+        setHomeCountry(null);
+        setLoading(false);
+      }
       return;
     }
     
@@ -155,26 +159,44 @@ export const useFamilyData = () => {
         .map(w => w.country_id)
         .filter((id): id is string => id !== null);
 
-      setFamilyMembers(membersWithCount);
-      setCountries(countriesWithVisits);
-      setWishlist(wishlistIds);
-      setHomeCountry(userHomeCountry);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setFamilyMembers(membersWithCount);
+        setCountries(countriesWithVisits);
+        setWishlist(wishlistIds);
+        setHomeCountry(userHomeCountry);
+      }
     } catch (error) {
-      console.error("Error fetching data:", error);
+      logger.error("Error fetching data:", error);
     } finally {
-      setLoading(false);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
       isFetching.current = false;
     }
   }, [user]);
 
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  // Store debounce timer in ref to avoid stale closures
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
+    isMountedRef.current = true;
     fetchData();
 
     // Debounce realtime updates
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const debouncedFetch = () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(fetchData, 300);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        // Only fetch if component is still mounted
+        if (isMountedRef.current) {
+          fetchData();
+        }
+      }, 300);
     };
 
     const channel = supabase
@@ -188,10 +210,16 @@ export const useFamilyData = () => {
       .subscribe();
 
     return () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
+      isMountedRef.current = false;
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
-  }, [user, fetchData]);
+    // Only depend on user, not fetchData, to prevent re-subscriptions
+    // fetchData is stable due to useCallback with user dependency
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Memoize totalContinents calculation
   const totalContinents = useMemo(() => 

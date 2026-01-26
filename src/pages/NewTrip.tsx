@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/layout/AppLayout";
 import TripWizard from "@/components/trips/TripWizard";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { Loader2 } from "lucide-react";
 
 const NewTrip = () => {
@@ -34,7 +35,9 @@ const NewTrip = () => {
             Let's create the perfect family adventure
           </p>
         </div>
-        <TripWizard />
+        <ErrorBoundary>
+          <TripWizard />
+        </ErrorBoundary>
       </div>
     </AppLayout>
   );

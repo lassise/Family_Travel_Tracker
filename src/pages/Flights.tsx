@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useFlightPreferences } from "@/hooks/useFlightPreferences";
@@ -22,12 +22,16 @@ import { FlightSelectionCart, type SelectedFlight } from "@/components/flights/F
 import { FlightLegResults } from "@/components/flights/FlightLegResults";
 import { FlightProgressIndicator } from "@/components/flights/FlightProgressIndicator";
 import { buildGoogleFlightsUrl, logBookingEvent } from "@/lib/googleFlightsUrl";
+import { addToFlightHistory, getFlightHistory, removeFromFlightHistory, formatHistoryEntry, type FlightHistoryEntry } from "@/lib/flightHistory";
 import { PlaneTakeoff, PlaneLanding, Users, Filter, Clock, DollarSign, Loader2, AlertCircle, Star, Zap, Heart, Baby, ChevronDown, AlertTriangle, Info, Armchair, CheckCircle2, XCircle, ExternalLink, ArrowUpDown, Bell, TrendingDown, TrendingUp, Minus, Lightbulb, ArrowLeft, ArrowRight, Plus, Trash2, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import { scoreFlights, categorizeFlights, type ScoredFlight, type FlightResult, type PassengerBreakdown } from "@/lib/flightScoring";
 import { searchAirports, MAJOR_US_AIRLINES, INTERNATIONAL_AIRLINES, AIRLINES, type Airport } from "@/lib/airportsData";
 import { runFlightAvoidanceSelfTest } from "@/lib/flightAvoidanceSelfTest";
+import { validateOneWaySearch, validateRoundTripSearch, validateMultiCitySearch } from "@/lib/flightValidation";
+import { formatPrice } from "@/lib/priceFormatter";
 
 const DEPARTURE_TIMES = [{
   value: "early_morning",
@@ -225,6 +229,8 @@ const Flights = () => {
   const [compareAllCabins, setCompareAllCabins] = useState(false);
   const [cabinClass, setCabinClass] = useState<string>("economy");
   const [priceAlertOpen, setPriceAlertOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [flightHistory, setFlightHistory] = useState<FlightHistoryEntry[]>([]);
 
   // Selection cart
   const [selectedFlights, setSelectedFlights] = useState<SelectedFlight[]>([]);
@@ -273,18 +279,30 @@ const Flights = () => {
     }
   }, [user, authLoading, profile, needsOnboarding, navigate]);
 
+  // Auto-fill primary home airport only on initial load, not when user clears the field
+  const hasAutoFilledOrigin = useRef(false);
   useEffect(() => {
-    if (!prefsLoading && preferences.home_airports.length > 0 && !origin) {
+    // Only auto-fill once when preferences first load and origin is empty
+    // Don't auto-fill if user has manually cleared the field
+    if (!prefsLoading && preferences.home_airports.length > 0 && !origin && !hasAutoFilledOrigin.current) {
       const primary = preferences.home_airports.find(a => a.isPrimary);
-      if (primary) setOrigin(primary.code);
+      if (primary) {
+        setOrigin(primary.code);
+        hasAutoFilledOrigin.current = true;
+      }
     }
-  }, [preferences.home_airports, prefsLoading, origin]);
+  }, [preferences.home_airports, prefsLoading]);
 
   useEffect(() => {
     if (!prefsLoading && preferences.seat_preference && preferences.seat_preference.length > 0) {
       setSeatPreferences(preferences.seat_preference);
     }
   }, [preferences.seat_preference, prefsLoading]);
+
+  // Load flight history on mount
+  useEffect(() => {
+    setFlightHistory(getFlightHistory());
+  }, []);
 
   // Clear selections when trip type changes
   useEffect(() => {
@@ -328,30 +346,69 @@ const Flights = () => {
   const isPremiumCabin = cabinClass === "business" || cabinClass === "first";
 
   const searchFlights = async () => {
+    // Validate search parameters before making API call
     if (tripType === "multicity") {
       const validSegments = multiCitySegments.filter(s => s.origin && s.destination && s.date);
-      if (validSegments.length < 2) {
-        toast.error("Please fill in at least 2 flight segments");
+      const validation = validateMultiCitySearch(validSegments, adults, children, infantsInSeat, infantsOnLap);
+      
+      if (!validation.valid) {
+        toast.error(validation.errors[0] || "Please check your search parameters");
+        if (validation.errors.length > 1) {
+          // Show additional errors in console for debugging
+          logger.warn("Multi-city validation errors:", validation.errors);
+        }
         return;
       }
+      
+      // Add to history
+      if (validSegments.length > 0) {
+        addToFlightHistory(
+          validSegments[0].origin,
+          validSegments[validSegments.length - 1].destination,
+          validSegments[0].date,
+          "multicity"
+        );
+        setFlightHistory(getFlightHistory());
+      }
+      
       setSelectedFlights([]);
       setConfirmedLegs([]);
       setActiveLegTab("segment-1");
       searchMultiCity(validSegments);
     } else if (tripType === "roundtrip") {
-      if (!origin || !destination || !departDate || !returnDate) {
-        toast.error("Please fill in all fields for round trip");
+      const validation = validateRoundTripSearch(origin, destination, departDate, returnDate, adults, children, infantsInSeat, infantsOnLap);
+      
+      if (!validation.valid) {
+        toast.error(validation.errors[0] || "Please check your search parameters");
+        if (validation.errors.length > 1) {
+          logger.warn("Round-trip validation errors:", validation.errors);
+        }
         return;
       }
+      
+      // Add to history
+      addToFlightHistory(origin, destination, departDate, "roundtrip", returnDate);
+      setFlightHistory(getFlightHistory());
+      
       setSelectedFlights([]);
       setConfirmedLegs([]);
       setActiveLegTab("outbound");
       searchRoundTrip(origin, destination, departDate, returnDate);
     } else {
-      if (!origin || !destination || !departDate) {
-        toast.error("Please fill in origin, destination, and departure date");
+      const validation = validateOneWaySearch(origin, destination, departDate, adults, children, infantsInSeat, infantsOnLap);
+      
+      if (!validation.valid) {
+        toast.error(validation.errors[0] || "Please check your search parameters");
+        if (validation.errors.length > 1) {
+          logger.warn("One-way validation errors:", validation.errors);
+        }
         return;
       }
+      
+      // Add to history
+      addToFlightHistory(origin, destination, departDate, "oneway");
+      setFlightHistory(getFlightHistory());
+      
       setSelectedFlights([]);
       setConfirmedLegs([]);
       setActiveLegTab("outbound");
@@ -785,6 +842,65 @@ const Flights = () => {
               </Card>
             </Collapsible>
 
+            {/* Recently Viewed / History */}
+            {flightHistory.length > 0 && (
+              <Card className="mb-4">
+                <CardContent className="pt-4">
+                  <Collapsible open={showHistory} onOpenChange={setShowHistory}>
+                    <CollapsibleTrigger asChild>
+                      <div className="flex items-center justify-between cursor-pointer hover:bg-muted/50 -mx-6 px-6 py-2 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">Recently Viewed ({flightHistory.length})</span>
+                        </div>
+                        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="space-y-2 mt-2">
+                        {flightHistory.slice(0, 5).map((entry) => (
+                          <div
+                            key={entry.id}
+                            className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 cursor-pointer group"
+                            onClick={() => {
+                              setOrigin(entry.origin);
+                              setDestination(entry.destination);
+                              setDepartDate(entry.date);
+                              if (entry.returnDate) setReturnDate(entry.returnDate);
+                              setTripType(entry.tripType);
+                              setShowHistory(false);
+                            }}
+                          >
+                            <div className="flex items-center gap-2 flex-1">
+                              <PlaneTakeoff className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-sm">{formatHistoryEntry(entry)}</span>
+                              {entry.price && (
+                                <Badge variant="outline" className="text-xs">
+                                  {formatPrice(entry.price)}
+                                </Badge>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeFromFlightHistory(entry.id);
+                                setFlightHistory(getFlightHistory());
+                              }}
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Search Form */}
             <Card className="mb-6">
               <CardContent className="pt-6 space-y-4">
@@ -1086,6 +1202,7 @@ const Flights = () => {
                             canGoBack={index > 0}
                             onGoBack={() => handleGoBackToLeg(legId)}
                             nextLegLabel={nextLegLabel || undefined}
+                            preferNonstop={preferences.prefer_nonstop}
                           />
                         </TabsContent>
                       );
@@ -1126,6 +1243,7 @@ const Flights = () => {
                         tripType={tripType}
                         onContinueToGoogle={() => handleContinueToGoogle()}
                         onCopyChecklist={() => toast.success("Checklist copied to clipboard")}
+                        preferNonstop={preferences.prefer_nonstop}
                       />
                     </div>
                   );

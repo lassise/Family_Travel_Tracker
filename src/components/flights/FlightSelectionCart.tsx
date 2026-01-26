@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ScoredFlight } from "@/lib/flightScoring";
 import { toast } from "sonner";
+import { formatPrice, formatPricePerTicket } from "@/lib/priceFormatter";
 
 export interface SelectedFlight {
   legId: string;
@@ -86,10 +87,20 @@ export const FlightSelectionCart = ({
         if (!seg) return "";
 
         const stops = sel.flight.itineraries[0]?.segments.length - 1;
+        // Helper to parse duration (ISO 8601 string or number in minutes)
+        const parseDuration = (duration: string | number | undefined | null): number => {
+          if (duration === null || duration === undefined) return 0;
+          if (typeof duration === 'number') return duration;
+          if (typeof duration !== 'string') return 0;
+          const hours = duration.match(/(\d+)H/)?.[1] || 0;
+          const minutes = duration.match(/(\d+)M/)?.[1] || 0;
+          return parseInt(String(hours)) * 60 + parseInt(String(minutes));
+        };
+        
         const duration = sel.flight.itineraries.reduce(
           (sum, it) =>
             sum +
-            it.segments.reduce((s, segment) => s + (typeof segment.duration === "number" ? segment.duration : 0), 0),
+            it.segments.reduce((s, segment) => s + parseDuration(segment.duration), 0),
           0
         );
 
@@ -99,7 +110,7 @@ export const FlightSelectionCart = ({
 • Arrives: ${formatTime(sel.flight.itineraries[0]?.segments[sel.flight.itineraries[0]?.segments.length - 1]?.arrivalTime || "")} at ${sel.flight.itineraries[0]?.segments[sel.flight.itineraries[0]?.segments.length - 1]?.arrivalAirport || sel.destination}
 • Stops: ${stops === 0 ? "Nonstop" : `${stops} stop${stops > 1 ? "s" : ""}`}
 • Duration: ${Math.floor(duration / 60)}h ${duration % 60}m
-• Price: $${sel.flight.price}`;
+• Price: ${formatPrice(sel.flight.price)}`;
       })
       .filter(Boolean)
       .join("\n\n");
@@ -192,7 +203,7 @@ export const FlightSelectionCart = ({
                   </div>
 
                   <div className="mt-2 text-right">
-                    <span className="font-bold text-primary">${sel.flight.price}</span>
+                    <span className="font-bold text-primary">{formatPrice(sel.flight.price)}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -212,12 +223,12 @@ export const FlightSelectionCart = ({
         <div className="border-t pt-3 space-y-2">
           <div className="flex justify-between text-sm">
             <span>Subtotal ({passengerCount} traveler{passengerCount > 1 ? "s" : ""})</span>
-            <span className="font-bold">${totalPrice.toFixed(0)}</span>
+            <span className="font-bold">{formatPrice(totalPrice)}</span>
           </div>
           {passengerCount > 1 && (
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Per person</span>
-              <span>${(totalPrice / passengerCount).toFixed(0)}</span>
+              <span>{formatPricePerTicket(totalPrice, passengerCount)}</span>
             </div>
           )}
         </div>

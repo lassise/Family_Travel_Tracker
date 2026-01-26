@@ -17,6 +17,7 @@ import { useHomeCountry } from "@/hooks/useHomeCountry";
 import { useDashboardFilter } from "@/hooks/useDashboardFilter";
 import { useVisitDetails } from "@/hooks/useVisitDetails";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,7 +87,7 @@ const Dashboard = () => {
         .eq('user_id', user.id);
       
       if (error) {
-        console.error('Error fetching visit members:', error);
+        logger.error('Error fetching visit members:', error);
         return;
       }
       
@@ -134,14 +135,14 @@ const Dashboard = () => {
     }
   }, [user, authLoading, profile, needsOnboarding, navigate]);
 
-  // Memoize computed values
+  // Memoize computed values with safe array guards
   const upcomingTrips = useMemo(() => 
-    trips.filter((t) => t.status === "upcoming" || t.status === "planning"),
+    (trips || []).filter((t) => t.status === "upcoming" || t.status === "planning"),
     [trips]
   );
   
   const activeTrips = useMemo(() => 
-    trips.filter((t) => t.status === "active"),
+    (trips || []).filter((t) => t.status === "active"),
     [trips]
   );
   
