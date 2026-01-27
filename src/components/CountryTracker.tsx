@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { CheckCircle2, Trash2, Calendar, MapPin, Clock, ChevronDown, Plus } from "lucide-react";
+import { CheckCircle2, Trash2, Calendar, MapPin, Clock, ChevronDown, Plus, Search, X, ArrowUpDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import AddCountryModal from "./countries/AddCountryModal";
@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import CountryFlag from "./common/CountryFlag";
 import CountryFilters from "./travel/CountryFilters";
 import DeleteConfirmDialog from "./common/DeleteConfirmDialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CombineMultiCountryTripsDialog } from "./countries/CombineMultiCountryTripsDialog";
 
 interface CountryTrackerProps {
   countries: Country[];
@@ -29,6 +31,8 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
   const [selectedContinent, setSelectedContinent] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'name' | 'visits' | 'days' | 'recent' | 'continent'>('name');
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; countryId: string; countryName: string }>({
     open: false,
     countryId: '',
@@ -64,9 +68,22 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
     };
   }, [countries, visitDetails]);
 
-  // Filter countries based on selected filters
+  // Filter and sort countries based on selected filters, search query, and sort option
   const filteredCountries = useMemo(() => {
     let result = countries;
+    
+    // Apply search filter first (case-insensitive)
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter(c => {
+        const countryName = c.name.toLowerCase();
+        const continent = c.continent.toLowerCase();
+        // Also search in cities if available
+        const summary = getCountrySummary(c.id);
+        const citiesMatch = summary.cities.some(city => city.toLowerCase().includes(query));
+        return countryName.includes(query) || continent.includes(query) || citiesMatch;
+      });
+    }
     
     if (selectedContinent !== 'all') {
       result = result.filter(c => c.continent === selectedContinent);
@@ -87,12 +104,65 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
       result = result.filter(c => countryIdsForYear.has(c.id));
     }
     
-    return result;
-  }, [countries, selectedContinent, selectedYear, visitDetails]);
+    // Helper function to get most recent visit date for a country
+    const getMostRecentDate = (countryId: string): number => {
+      const countryVisits = visitDetails
+        .filter(v => v.country_id === countryId)
+        .map(v => {
+          if (v.visit_date) return new Date(v.visit_date).getTime();
+          if (v.approximate_year) {
+            // Use approximate year (set to mid-year for sorting)
+            return new Date(v.approximate_year, 6, 1).getTime();
+          }
+          return 0;
+        });
+      // Return most recent date, or 0 if no visits
+      return countryVisits.length > 0 ? Math.max(...countryVisits) : 0;
+    };
+    
+    // Apply sorting
+    const sortedResult = [...result].sort((a, b) => {
+      const summaryA = getCountrySummary(a.id);
+      const summaryB = getCountrySummary(b.id);
+      
+      switch (sortBy) {
+        case 'name':
+          // Sort alphabetically by name
+          return a.name.localeCompare(b.name);
+        
+        case 'visits':
+          // Sort by number of visits (descending)
+          return summaryB.timesVisited - summaryA.timesVisited;
+        
+        case 'days':
+          // Sort by total days (descending)
+          return summaryB.totalDays - summaryA.totalDays;
+        
+        case 'recent':
+          // Sort by most recent visit date (descending)
+          const dateA = getMostRecentDate(a.id);
+          const dateB = getMostRecentDate(b.id);
+          // If dates are equal, fall back to name for consistent sorting
+          return dateB !== dateA ? dateB - dateA : a.name.localeCompare(b.name);
+        
+        case 'continent':
+          // Sort by continent first, then by name within continent
+          const continentCompare = a.continent.localeCompare(b.continent);
+          return continentCompare !== 0 ? continentCompare : a.name.localeCompare(b.name);
+        
+        default:
+          return 0;
+      }
+    });
+    
+    return sortedResult;
+  }, [countries, searchQuery, selectedContinent, selectedYear, sortBy, visitDetails, getCountrySummary]);
 
   const clearFilters = () => {
     setSelectedContinent('all');
     setSelectedYear('all');
+    setSearchQuery('');
+    setSortBy('name'); // Reset to default sort
   };
 
   const toggleCountry = (countryId: string) => {
@@ -182,10 +252,13 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto mb-4">
             Our family's travel journey across the world
           </p>
-          <Button onClick={() => setAddCountryModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Country
-          </Button>
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <Button onClick={() => setAddCountryModalOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Country
+            </Button>
+            <CombineMultiCountryTripsDialog onCombined={handleUpdate} />
+          </div>
           <AddCountryModal
             open={addCountryModalOpen}
             onOpenChange={setAddCountryModalOpen}
@@ -202,21 +275,68 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
           />
         </div>
 
-        {/* Filters */}
+        {/* Search and Filters */}
         {countries.length > 0 && (
-          <div className="mb-6">
-            <CountryFilters
-              continents={continents}
-              years={years}
-              selectedContinent={selectedContinent}
-              selectedYear={selectedYear}
-              onContinentChange={setSelectedContinent}
-              onYearChange={setSelectedYear}
-              onClear={clearFilters}
-            />
-            {(selectedContinent !== 'all' || selectedYear !== 'all') && (
-              <p className="text-sm text-muted-foreground mt-2">
+          <div className="mb-6 space-y-4">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search countries by name, continent, or city..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-10 py-2 border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Sort and Filters Row */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Sort Dropdown */}
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+                  <SelectTrigger className="w-[180px] h-8 text-sm">
+                    <SelectValue placeholder="Sort by..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Name (A-Z)</SelectItem>
+                    <SelectItem value="visits">Most Visited</SelectItem>
+                    <SelectItem value="days">Most Days</SelectItem>
+                    <SelectItem value="recent">Recently Visited</SelectItem>
+                    <SelectItem value="continent">Continent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Filters */}
+              <div className="flex-1">
+                <CountryFilters
+                  continents={continents}
+                  years={years}
+                  selectedContinent={selectedContinent}
+                  selectedYear={selectedYear}
+                  onContinentChange={setSelectedContinent}
+                  onYearChange={setSelectedYear}
+                  onClear={clearFilters}
+                />
+              </div>
+            </div>
+            
+            {/* Results count */}
+            {(selectedContinent !== 'all' || selectedYear !== 'all' || searchQuery.trim()) && (
+              <p className="text-sm text-muted-foreground">
                 Showing {filteredCountries.length} of {countries.length} countries
+                {searchQuery.trim() && ` matching "${searchQuery}"`}
               </p>
             )}
           </div>

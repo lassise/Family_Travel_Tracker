@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,15 +34,32 @@ export const CombineTripsDialog = ({ tripsToCombine, onCombined }: CombineTripsD
 
   // Collect all countries from all trips
   const [combinedCountries, setCombinedCountries] = useState<CountryWithDates[]>([]);
+  
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
 
   // Initialize countries when dialog opens
   useEffect(() => {
+    // Set mounted flag when effect runs
+    isMountedRef.current = true;
+    
     if (open && tripsToCombine.length > 0) {
       const loadCountries = async () => {
         await refetch();
+        
+        // Check if component is still mounted before proceeding
+        if (!isMountedRef.current) {
+          return;
+        }
+        
         const allCountries: CountryWithDates[] = [];
 
         for (const trip of tripsToCombine) {
+          // Check mount state before each iteration
+          if (!isMountedRef.current) {
+            return;
+          }
+          
           const tripCountries = getCountriesForTrip(trip.id);
           
           // If trip has no countries in trip_countries, try to infer from destination
@@ -96,6 +113,11 @@ export const CombineTripsDialog = ({ tripsToCombine, onCombined }: CombineTripsD
           }
         }
 
+        // Final mount check before state update
+        if (!isMountedRef.current) {
+          return;
+        }
+
         // Limit to MAX_COUNTRIES
         if (allCountries.length > MAX_COUNTRIES) {
           toast.warning(`Only the first ${MAX_COUNTRIES} countries will be included`);
@@ -108,6 +130,11 @@ export const CombineTripsDialog = ({ tripsToCombine, onCombined }: CombineTripsD
     } else {
       setCombinedCountries([]);
     }
+    
+    // Cleanup function: mark component as unmounted
+    return () => {
+      isMountedRef.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tripsToCombine]);
 
