@@ -36,6 +36,12 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
   });
   const [isDeleting, setIsDeleting] = useState(false);
   const [addCountryModalOpen, setAddCountryModalOpen] = useState(false);
+  const [newCountryVisitDialog, setNewCountryVisitDialog] = useState<{
+    open: boolean;
+    countryId: string;
+    countryName: string;
+    countryCode: string;
+  } | null>(null);
 
   // Get unique continents and years from countries
   const { continents, years } = useMemo(() => {
@@ -185,6 +191,14 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
             onOpenChange={setAddCountryModalOpen}
             familyMembers={familyMembers}
             onSuccess={handleUpdate}
+            onOpenVisitDetails={(countryId, countryName, countryCode) => {
+              setNewCountryVisitDialog({
+                open: true,
+                countryId,
+                countryName,
+                countryCode,
+              });
+            }}
           />
         </div>
 
@@ -378,6 +392,23 @@ const CountryTracker = ({ countries, familyMembers, onUpdate }: CountryTrackerPr
           itemName={deleteDialog.countryName}
           loading={isDeleting}
         />
+
+        {newCountryVisitDialog && (
+          <CountryVisitDetailsDialog
+            countryId={newCountryVisitDialog.countryId}
+            countryName={newCountryVisitDialog.countryName}
+            countryCode={newCountryVisitDialog.countryCode}
+            onUpdate={handleUpdate}
+            buttonLabel="View / Add Trips"
+            open={newCountryVisitDialog.open}
+            onOpenChange={(open) =>
+              setNewCountryVisitDialog(prev =>
+                prev ? { ...prev, open } : prev
+              )
+            }
+            hideTrigger
+          />
+        )}
       </div>
     </section>
   );

@@ -166,6 +166,8 @@ interface CountryVisitDetailsDialogProps {
   // Optional controlled props
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  // When true, hide the trigger button and control the dialog purely via `open`
+  hideTrigger?: boolean;
 }
 
 // City picker component
@@ -501,6 +503,7 @@ const CountryVisitDetailsDialog = ({
   buttonLabel = "Details",
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  hideTrigger = false,
 }: CountryVisitDetailsDialogProps) => {
   const [internalOpen, setInternalOpen] = useState(false);
   
@@ -850,12 +853,14 @@ const CountryVisitDetailsDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleDialogChange}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-xs">
-          <Calendar className="w-3 h-3 mr-1" />
-          {buttonLabel}
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="sm" className="text-xs">
+            <Calendar className="w-3 h-3 mr-1" />
+            {buttonLabel}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">

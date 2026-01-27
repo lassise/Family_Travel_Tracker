@@ -20,6 +20,7 @@ interface AddCountryModalProps {
   familyMembers: Array<{ id: string; name: string }>;
   onSuccess: () => void;
   preSelectedCountry?: CountryOption;
+  onOpenVisitDetails?: (countryId: string, countryName: string, countryCode: string) => void;
 }
 
 const allCountries = getAllCountries();
@@ -29,7 +30,8 @@ const AddCountryModal = ({
   onOpenChange, 
   familyMembers, 
   onSuccess,
-  preSelectedCountry 
+  preSelectedCountry,
+  onOpenVisitDetails,
 }: AddCountryModalProps) => {
   const [comboboxOpen, setComboboxOpen] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<CountryOption | null>(preSelectedCountry || null);
@@ -150,7 +152,7 @@ const AddCountryModal = ({
     }
   };
 
-  const handleAddWithTrip = () => {
+  const handleAddWithTrip = async () => {
     if (!selectedCountry) {
       toast({
         title: "Validation Error",
@@ -160,14 +162,56 @@ const AddCountryModal = ({
       return;
     }
 
-    // Store selected country and members in sessionStorage for the trip wizard
-    sessionStorage.setItem('tripPreselectedCountry', JSON.stringify({
-      country: selectedCountry,
-      memberIds: selectedMembers
-    }));
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({ title: "You must be logged in", variant: "destructive" });
+        return;
+      }
 
-    onOpenChange(false);
-    navigate('/trips/new');
+      // Ensure the country exists and get its id
+      const { data: existingCountry } = await supabase
+        .from("countries")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("name", selectedCountry.name)
+        .maybeSingle();
+
+      let countryId: string;
+
+      if (existingCountry) {
+        countryId = existingCountry.id;
+      } else {
+        const { data: newCountry, error } = await supabase
+          .from("countries")
+          .insert([{
+            name: selectedCountry.name,
+            flag: selectedCountry.code,
+            continent: selectedCountry.continent,
+            user_id: user.id
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        countryId = newCountry.id;
+      }
+
+      onOpenChange(false);
+      onSuccess();
+
+      // Open the same View / Add Trips dialog used from each country row
+      if (onOpenVisitDetails) {
+        onOpenVisitDetails(countryId, selectedCountry.name, selectedCountry.code);
+      }
+    } catch (error) {
+      console.error("Error preparing country details:", error);
+      toast({
+        title: "Error",
+        description: "Failed to open country details. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const toggleAllMembers = (checked: boolean) => {
@@ -289,16 +333,16 @@ const AddCountryModal = ({
             </div>
           )}
 
-          {/* Action Tabs */}
+          {/* Action Tabs - choose between quick add or detailed add */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="quick" className="flex items-center gap-2">
                 <Zap className="h-4 w-4" />
-                Quick Add
+                Add Country (Quick)
               </TabsTrigger>
               <TabsTrigger value="trip" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
-                Add with Trip
+                Add Country (With Details)
               </TabsTrigger>
             </TabsList>
             
@@ -311,7 +355,7 @@ const AddCountryModal = ({
                 disabled={loading || !selectedCountry}
                 className="w-full"
               >
-                {loading ? "Adding..." : "Quick Add Country"}
+                {loading ? "Adding..." : "Add Country (Quick)"}
               </Button>
             </TabsContent>
             
@@ -325,7 +369,7 @@ const AddCountryModal = ({
                 className="w-full"
                 variant="secondary"
               >
-                Continue to Trip Planner
+                Add Country (With Details)
               </Button>
             </TabsContent>
           </Tabs>
