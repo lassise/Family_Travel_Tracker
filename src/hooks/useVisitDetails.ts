@@ -145,6 +145,67 @@ export const useVisitDetails = () => {
     return visitDetails.reduce((sum, v) => sum + (v.number_of_days || 0), 0);
   }, [visitDetails]);
 
+  /**
+   * Get grouped trip statistics
+   * Groups visits by trip_group_id to treat multi-country trips as ONE trip
+   * Returns total trip count and per-trip durations
+   */
+  const getGroupedTripStats = useCallback(() => {
+    const validVisits = visitDetails.filter(v => v.visit_date || v.approximate_year);
+    
+    // Group by trip_group_id
+    const tripGroups = new Map<string, VisitDetail[]>();
+    const standaloneVisits: VisitDetail[] = [];
+    
+    validVisits.forEach(visit => {
+      if (visit.trip_group_id) {
+        const existing = tripGroups.get(visit.trip_group_id) || [];
+        existing.push(visit);
+        tripGroups.set(visit.trip_group_id, existing);
+      } else {
+        standaloneVisits.push(visit);
+      }
+    });
+    
+    // Calculate duration for each trip group
+    const tripDurations: { groupId: string | null; totalDays: number; countryIds: string[]; tripName: string | null }[] = [];
+    
+    tripGroups.forEach((visits, groupId) => {
+      const totalDays = visits.reduce((sum, v) => sum + (v.number_of_days || 0), 0);
+      const countryIds = [...new Set(visits.map(v => v.country_id))];
+      const tripName = visits[0]?.trip_name || null;
+      if (totalDays > 0) {
+        tripDurations.push({ groupId, totalDays, countryIds, tripName });
+      }
+    });
+    
+    // Add standalone visits as individual "trips"
+    standaloneVisits.forEach(visit => {
+      if (visit.number_of_days && visit.number_of_days > 0) {
+        tripDurations.push({
+          groupId: null,
+          totalDays: visit.number_of_days,
+          countryIds: [visit.country_id],
+          tripName: visit.trip_name,
+        });
+      }
+    });
+    
+    return {
+      // Total trip count = unique trip groups + standalone visits
+      totalTripCount: tripGroups.size + standaloneVisits.length,
+      tripDurations,
+      // Longest trip by grouped duration
+      longestTripDays: tripDurations.length > 0 
+        ? Math.max(...tripDurations.map(t => t.totalDays))
+        : 0,
+      // Average trip duration (grouped)
+      avgTripDuration: tripDurations.length > 0
+        ? Math.round(tripDurations.reduce((sum, t) => sum + t.totalDays, 0) / tripDurations.length)
+        : 0,
+    };
+  }, [visitDetails]);
+
   // Memoize getAllSummaries
   const getAllSummaries = useCallback((): Map<string, CountryVisitSummary> => {
     const countryIds = new Set<string>();
@@ -168,5 +229,6 @@ export const useVisitDetails = () => {
     getCountrySummary,
     getTotalDaysAbroad,
     getAllSummaries,
+    getGroupedTripStats,
   };
 };

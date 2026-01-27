@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Plus, Trash2, Clock, X, Edit3, Hash, CalendarDays, ChevronDown, ChevronUp, Users } from "lucide-react";
+import { Calendar, MapPin, Plus, Trash2, Clock, X, Edit3, Hash, CalendarDays, ChevronDown, ChevronUp, Users, Check, ChevronsUpDown, Globe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -32,6 +32,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { getCitiesForCountry } from "@/lib/citiesData";
+import { getAllCountries, type CountryOption } from "@/lib/countriesData";
 import { differenceInDays, parseISO, isAfter, format } from "date-fns";
 import {
   Collapsible,
@@ -39,6 +40,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { TravelDatePicker } from "@/components/TravelDatePicker";
+import CountryFlag from "@/components/common/CountryFlag";
+import { cn } from "@/lib/utils";
 
 // Calculate days between two dates (inclusive)
 const calculateDays = (startDate: string | null, endDate: string | null): number | null => {
@@ -67,6 +70,10 @@ interface NewVisitDraft {
   numberOfDays: number;
   cities: string[];
   familyMemberIds: string[];
+  // Country for this leg (allows different country per leg for multi-country trips)
+  countryCode: string;
+  countryName: string;
+  countryId: string | null; // null if the country doesn't exist yet in the user's list
 }
 
 // Debounced input component for trip name
@@ -267,21 +274,93 @@ const CityPicker = ({
   );
 };
 
+// All countries for the country selector
+const allCountries = getAllCountries();
+
+// Single country selector for a leg
+const LegCountrySelector = ({
+  selectedCode,
+  selectedName,
+  onSelect,
+}: {
+  selectedCode: string;
+  selectedName: string;
+  onSelect: (country: CountryOption) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between h-8 text-sm"
+          type="button"
+        >
+          <span className="flex items-center gap-2">
+            <CountryFlag countryCode={selectedCode} countryName={selectedName} size="sm" />
+            {selectedName}
+          </span>
+          <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[300px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search countries..." />
+          <CommandList className="max-h-[200px]">
+            <CommandEmpty>No country found.</CommandEmpty>
+            <CommandGroup>
+              {allCountries.map((country) => (
+                <CommandItem
+                  key={country.code}
+                  value={country.name}
+                  onSelect={() => {
+                    onSelect(country);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      selectedCode === country.code ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <CountryFlag
+                    countryCode={country.code}
+                    countryName={country.name}
+                    size="sm"
+                    className="mr-2"
+                  />
+                  <span>{country.name}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 // New visit draft card component
 const NewVisitCard = ({
   draft,
   index,
-  countryCode,
+  parentCountryCode,
   familyMembers,
   onUpdate,
   onRemove,
+  onCountryChange,
 }: {
   draft: NewVisitDraft;
   index: number;
-  countryCode: string;
+  parentCountryCode: string;
   familyMembers: FamilyMember[];
   onUpdate: (id: string, updates: Partial<NewVisitDraft>) => void;
   onRemove: (id: string) => void;
+  onCountryChange: (draftId: string, countryCode: string) => void;
 }) => {
   const months = [
     { value: 1, label: "January" },
@@ -325,12 +404,38 @@ const NewVisitCard = ({
     onUpdate(draft.id, { familyMemberIds: newIds });
   };
 
+  const handleCountrySelect = (country: CountryOption) => {
+    // Update the draft's country and clear cities (since they're country-specific)
+    onUpdate(draft.id, {
+      countryCode: country.code,
+      countryName: country.name,
+      countryId: null, // Will be resolved when saving
+      cities: [], // Clear cities when country changes
+    });
+    onCountryChange(draft.id, country.code);
+  };
+
+  // Determine if this leg is for a different country than the parent dialog
+  const isDifferentCountry = draft.countryCode !== parentCountryCode;
+
   return (
-    <Card className="border-primary/30 bg-primary/5">
+    <Card className={cn(
+      "border-primary/30 bg-primary/5",
+      isDifferentCountry && "border-blue-500/50 bg-blue-500/5"
+    )}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
-            <Badge variant="outline" className="text-xs">New Visit #{index + 1}</Badge>
+            <Badge variant={isDifferentCountry ? "default" : "outline"} className="text-xs">
+              {isDifferentCountry ? (
+                <>
+                  <Globe className="w-3 h-3 mr-1" />
+                  Leg #{index + 1}
+                </>
+              ) : (
+                `New Visit #${index + 1}`
+              )}
+            </Badge>
             <div className="flex items-center gap-2">
               <Label className="text-xs text-muted-foreground cursor-pointer">
                 Approximate dates
@@ -358,6 +463,24 @@ const NewVisitCard = ({
           >
             <Trash2 className="w-4 h-4" />
           </Button>
+        </div>
+
+        {/* Country Selector - allows picking a different country for this leg */}
+        <div className="mb-3">
+          <Label className="text-xs mb-1 block flex items-center gap-1">
+            <Globe className="w-3 h-3" />
+            Country for this leg
+          </Label>
+          <LegCountrySelector
+            selectedCode={draft.countryCode}
+            selectedName={draft.countryName}
+            onSelect={handleCountrySelect}
+          />
+          {isDifferentCountry && (
+            <p className="text-xs text-blue-600 mt-1">
+              This leg will be added to {draft.countryName}
+            </p>
+          )}
         </div>
 
         {/* Trip Name */}
@@ -451,10 +574,10 @@ const NewVisitCard = ({
           <div>
             <Label className="text-xs mb-1 block flex items-center gap-1">
               <MapPin className="w-3 h-3" />
-              Cities Visited
+              Cities Visited in {draft.countryName}
             </Label>
             <CityPicker
-              countryCode={countryCode}
+              countryCode={draft.countryCode}
               selectedCities={draft.cities}
               onAddCity={(city) =>
                 onUpdate(draft.id, { cities: [...draft.cities, city] })
@@ -529,11 +652,12 @@ const CountryVisitDetailsDialog = ({
   const { toast } = useToast();
 
   const cities = getCitiesForCountry(countryCode);
+  const [defaultVisitedMemberIds, setDefaultVisitedMemberIds] = useState<string[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [visitsResult, citiesResult, familyResult] = await Promise.all([
+      const [visitsResult, citiesResult, familyResult, countryVisitsResult] = await Promise.all([
         supabase
           .from("country_visit_details")
           .select("*")
@@ -548,15 +672,32 @@ const CountryVisitDetailsDialog = ({
           .from("family_members")
           .select("id, name, avatar")
           .order("name", { ascending: true }),
+        supabase
+          .from("country_visits")
+          .select("family_member_id")
+          .eq("country_id", countryId),
       ]);
 
       if (visitsResult.error) throw visitsResult.error;
       if (citiesResult.error) throw citiesResult.error;
       if (familyResult.error) throw familyResult.error;
+      if (countryVisitsResult.error) throw countryVisitsResult.error;
 
       setVisitDetails(visitsResult.data || []);
       setCityVisits(citiesResult.data || []);
       setFamilyMembers(familyResult.data || []);
+
+      // Precompute default family members who have visited this country
+      if (countryVisitsResult.data) {
+        const ids = Array.from(
+          new Set(
+            (countryVisitsResult.data as { family_member_id: string | null }[])
+              .map((row) => row.family_member_id)
+              .filter((id): id is string => !!id)
+          )
+        );
+        setDefaultVisitedMemberIds(ids);
+      }
 
       // Fetch visit family member associations
       if (visitsResult.data && visitsResult.data.length > 0) {
@@ -599,7 +740,13 @@ const CountryVisitDetailsDialog = ({
     endDate: null,
     numberOfDays: 1,
     cities: [],
-    familyMemberIds: [],
+    // Preselect all family members who have previously visited this country.
+    // If none have, this will be an empty array.
+    familyMemberIds: defaultVisitedMemberIds,
+    // Default to the parent dialog's country
+    countryCode: countryCode,
+    countryName: countryName,
+    countryId: countryId,
   });
 
   const handleAddNewVisitDraft = () => {
@@ -616,6 +763,66 @@ const CountryVisitDetailsDialog = ({
     setNewVisits((prev) => prev.filter((draft) => draft.id !== id));
   };
 
+  // When a leg's country changes, fetch family members who have visited that country
+  // For NEW countries (not yet in user's list), pre-select ALL family members
+  const handleLegCountryChange = useCallback(async (draftId: string, newCountryCode: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Find the country ID from the user's countries table
+      // Note: ISO code is stored in the 'flag' field, not 'code'
+      const { data: countryData } = await supabase
+        .from("countries")
+        .select("id")
+        .eq("flag", newCountryCode)
+        .eq("user_id", user.id)
+        .single();
+
+      if (countryData) {
+        // Country exists - fetch family members who have visited
+        const { data: visitData } = await supabase
+          .from("country_visits")
+          .select("family_member_id")
+          .eq("country_id", countryData.id);
+
+        if (visitData) {
+          const memberIds = Array.from(
+            new Set(
+              visitData
+                .map((row) => row.family_member_id)
+                .filter((id): id is string => !!id)
+            )
+          );
+          
+          // Update the draft with the country ID and preselected family members
+          setNewVisits((prev) =>
+            prev.map((draft) =>
+              draft.id === draftId
+                ? { ...draft, countryId: countryData.id, familyMemberIds: memberIds }
+                : draft
+            )
+          );
+        }
+      } else {
+        // NEW COUNTRY - not in user's list yet
+        // Pre-select ALL family members since this is a brand new country
+        // The user can deselect anyone who didn't go on this trip
+        const allMemberIds = familyMembers.map(m => m.id);
+        
+        setNewVisits((prev) =>
+          prev.map((draft) =>
+            draft.id === draftId
+              ? { ...draft, countryId: null, familyMemberIds: allMemberIds }
+              : draft
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching country data for leg:", error);
+    }
+  }, [familyMembers]);
+
   const handleSaveNewVisits = async () => {
     if (newVisits.length === 0) return;
 
@@ -628,11 +835,65 @@ const CountryVisitDetailsDialog = ({
         return;
       }
 
+      // Determine if we have multiple legs (for trip grouping)
+      const hasMultipleLegs = newVisits.length > 1;
+      const hasDifferentCountries = new Set(newVisits.map(d => d.countryCode)).size > 1;
+      
+      // Generate a trip_group_id if we have multiple legs or different countries
+      const tripGroupId = (hasMultipleLegs || hasDifferentCountries) ? crypto.randomUUID() : null;
+
+      // Use the first non-empty trip name as the shared trip name for the group
+      const sharedTripName = newVisits.find(d => d.tripName)?.tripName || null;
+
       // Insert all new visits
       for (const draft of newVisits) {
+        // Resolve the country ID - may need to create the country first
+        let resolvedCountryId = draft.countryId;
+        
+        if (!resolvedCountryId) {
+          // Check if country exists in user's countries table
+          // Note: ISO code is stored in the 'flag' field
+          const { data: existingCountry } = await supabase
+            .from("countries")
+            .select("id")
+            .eq("flag", draft.countryCode)
+            .eq("user_id", user.id)
+            .single();
+
+          if (existingCountry) {
+            resolvedCountryId = existingCountry.id;
+          } else {
+            // Create the country for this user
+            // Note: 'flag' field stores the ISO code, not emoji
+            const countryInfo = allCountries.find(c => c.code === draft.countryCode);
+            const { data: newCountry, error: createError } = await supabase
+              .from("countries")
+              .insert({
+                name: draft.countryName,
+                flag: draft.countryCode, // ISO code goes in flag field
+                continent: countryInfo?.continent || "Unknown",
+                user_id: user.id,
+              })
+              .select()
+              .single();
+
+            if (createError) {
+              console.error("Error creating country:", createError);
+              toast({ title: `Error adding ${draft.countryName}`, variant: "destructive" });
+              continue;
+            }
+            resolvedCountryId = newCountry.id;
+          }
+        }
+
+        if (!resolvedCountryId) {
+          console.error("Could not resolve country ID for:", draft.countryCode);
+          continue;
+        }
+
         const visitData = {
-          country_id: countryId,
-          trip_name: draft.tripName || null,
+          country_id: resolvedCountryId,
+          trip_name: draft.tripName || sharedTripName || null,
           is_approximate: draft.isApproximate,
           approximate_month: draft.approximateMonth,
           approximate_year: draft.approximateYear,
@@ -640,6 +901,7 @@ const CountryVisitDetailsDialog = ({
           end_date: draft.endDate,
           number_of_days: draft.numberOfDays,
           user_id: user.id,
+          trip_group_id: tripGroupId,
         };
 
         const { data: insertedVisit, error: visitError } = await supabase
@@ -665,33 +927,80 @@ const CountryVisitDetailsDialog = ({
           if (familyError) console.error("Error saving family members:", familyError);
         }
 
-        // Insert cities for this visit
+        // Insert cities for this visit (using the draft's resolved country ID)
         if (draft.cities.length > 0) {
-          const cityInserts = draft.cities.map((city) => ({
-            country_id: countryId,
-            city_name: city,
-            user_id: user.id,
-          }));
+          // First check existing cities for this specific country
+          const { data: existingCitiesData } = await supabase
+            .from("city_visits")
+            .select("city_name")
+            .eq("country_id", resolvedCountryId);
 
-          // Check for duplicates first
-          const existingCities = cityVisits.map((c) => c.city_name.toLowerCase());
-          const newCities = cityInserts.filter(
-            (c) => !existingCities.includes(c.city_name.toLowerCase())
-          );
+          const existingCityNames = (existingCitiesData || []).map(c => c.city_name.toLowerCase());
 
-          if (newCities.length > 0) {
+          const cityInserts = draft.cities
+            .filter(city => !existingCityNames.includes(city.toLowerCase()))
+            .map((city) => ({
+              country_id: resolvedCountryId,
+              city_name: city,
+              user_id: user.id,
+            }));
+
+          if (cityInserts.length > 0) {
             const { error: cityError } = await supabase
               .from("city_visits")
-              .insert(newCities);
+              .insert(cityInserts);
 
-            if (cityError) throw cityError;
+            if (cityError) console.error("Error saving cities:", cityError);
+          }
+        }
+
+        // Ensure the country is marked as visited
+        // Track if this was a newly created country (no prior visits possible)
+        const isNewlyCreatedCountry = !draft.countryId;
+        
+        // Determine which family members to mark as visitors
+        let membersToMark = draft.familyMemberIds;
+        
+        // For NEW countries with no family members selected, auto-add all family members
+        // This ensures the country shows up in the visited list
+        if (isNewlyCreatedCountry && membersToMark.length === 0 && familyMembers.length > 0) {
+          membersToMark = familyMembers.map(m => m.id);
+        }
+        
+        // Create visit entries for the family members
+        for (const memberId of membersToMark) {
+          // Check if visit already exists
+          const { data: existingVisit } = await supabase
+            .from("country_visits")
+            .select("id")
+            .eq("country_id", resolvedCountryId)
+            .eq("family_member_id", memberId)
+            .single();
+
+          if (!existingVisit) {
+            await supabase
+              .from("country_visits")
+              .insert({
+                country_id: resolvedCountryId,
+                family_member_id: memberId,
+                user_id: user.id,
+              });
           }
         }
       }
 
-      toast({ title: `Added ${newVisits.length} visit${newVisits.length > 1 ? "s" : ""}` });
+      const legCount = newVisits.length;
+      const countryCount = new Set(newVisits.map(d => d.countryCode)).size;
+      
+      if (countryCount > 1) {
+        toast({ title: `Added ${legCount} legs across ${countryCount} countries` });
+      } else {
+        toast({ title: `Added ${legCount} visit${legCount > 1 ? "s" : ""}` });
+      }
+      
       setNewVisits([]);
       fetchData();
+      onUpdate(); // Notify parent to refresh
     } catch (error) {
       console.error("Error saving visits:", error);
       toast({ title: "Error saving visits", variant: "destructive" });
@@ -885,13 +1194,13 @@ const CountryVisitDetailsDialog = ({
         <ScrollArea className="h-[500px] pr-4">
           <div className="space-y-6">
             {/* Add Multiple Visits Section */}
-            <div className="p-4 border rounded-lg bg-muted/30">
+              <div className="p-4 border rounded-lg bg-muted/30">
               <div className="flex items-center gap-2 mb-2">
-                <Hash className="w-4 h-4 text-muted-foreground" />
-                <Label className="font-medium">Add Visits</Label>
+                <Globe className="w-4 h-4 text-muted-foreground" />
+                <Label className="font-medium">Add Trip Legs</Label>
               </div>
               <p className="text-xs text-muted-foreground mb-3">
-                Add one or more visits at once. Include cities you visited on each trip.
+                Add one or more trip legs. Each leg can be in a different country — perfect for multi-country trips!
               </p>
               
               {newVisits.length > 0 && (
@@ -901,10 +1210,11 @@ const CountryVisitDetailsDialog = ({
                       key={draft.id}
                       draft={draft}
                       index={index}
-                      countryCode={countryCode}
+                      parentCountryCode={countryCode}
                       familyMembers={familyMembers}
                       onUpdate={handleUpdateNewVisitDraft}
                       onRemove={handleRemoveNewVisitDraft}
+                      onCountryChange={handleLegCountryChange}
                     />
                   ))}
                 </div>
@@ -913,11 +1223,17 @@ const CountryVisitDetailsDialog = ({
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={handleAddNewVisitDraft}>
                   <Plus className="w-4 h-4 mr-1" />
-                  Add Another Visit
+                  {newVisits.length === 0 ? "Add Trip Leg" : "Add Another Leg"}
                 </Button>
                 {newVisits.length > 0 && (
                   <Button size="sm" onClick={handleSaveNewVisits} disabled={saving}>
-                    {saving ? "Saving..." : `Save ${newVisits.length} Visit${newVisits.length > 1 ? "s" : ""}`}
+                    {saving ? "Saving..." : (() => {
+                      const countryCount = new Set(newVisits.map(d => d.countryCode)).size;
+                      if (countryCount > 1) {
+                        return `Save ${newVisits.length} Legs (${countryCount} countries)`;
+                      }
+                      return `Save ${newVisits.length} Visit${newVisits.length > 1 ? "s" : ""}`;
+                    })()}
                   </Button>
                 )}
               </div>
@@ -1030,10 +1346,13 @@ const CountryVisitDetailsDialog = ({
                       visitSubtitle = [monthName, visit.approximate_year].filter(Boolean).join(" ") || "Date unknown";
                     } else if (visit.visit_date) {
                       visitSubtitle = visit.end_date
-                        ? `${format(parseISO(visit.visit_date), "MMM d")} - ${format(parseISO(visit.end_date), "MMM d, yyyy")}`
+                        ? `${format(parseISO(visit.visit_date), "MMM d")} - ${format(parseISO(visit.visit_date), "MMM d, yyyy")}`
                         : format(parseISO(visit.visit_date), "MMM d, yyyy");
                     }
                     visitSubtitle += ` • ${visit.number_of_days} day${visit.number_of_days !== 1 ? "s" : ""}`;
+                    
+                    // Indicate if this visit is part of a multi-country trip group
+                    const isPartOfGroupedTrip = !!visit.trip_group_id;
 
                     return (
                       <Collapsible key={visit.id} open={isExpanded} onOpenChange={() => toggleVisitExpanded(visit.id)}>
@@ -1042,7 +1361,14 @@ const CountryVisitDetailsDialog = ({
                             <div className="p-3 flex items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors">
                               <div className="flex items-center gap-3">
                                 <div>
-                                  <div className="font-medium text-sm">{visitTitle}</div>
+                                  <div className="font-medium text-sm flex items-center gap-2">
+                                    {visitTitle}
+                                    {isPartOfGroupedTrip && (
+                                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                        Multi-country
+                                      </Badge>
+                                    )}
+                                  </div>
                                   <div className="text-xs text-muted-foreground">{visitSubtitle}</div>
                                 </div>
                               </div>

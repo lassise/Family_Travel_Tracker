@@ -56,7 +56,56 @@ const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
     const visitedCountries = countries.filter(c => c.visitedBy.length > 0);
     const validVisits = visitDetails.filter(v => v.visit_date || v.approximate_year);
     
-    // 1. Travel Frequency Over Time
+    // --- GROUPED TRIP LOGIC ---
+    // Group visits by trip_group_id to treat multi-country trips as ONE trip
+    // Visits without trip_group_id are standalone trips
+    const tripGroups = new Map<string, typeof validVisits>();
+    const standaloneVisits: typeof validVisits = [];
+    
+    validVisits.forEach(visit => {
+      if (visit.trip_group_id) {
+        const existing = tripGroups.get(visit.trip_group_id) || [];
+        existing.push(visit);
+        tripGroups.set(visit.trip_group_id, existing);
+      } else {
+        standaloneVisits.push(visit);
+      }
+    });
+    
+    // Calculate duration for each trip group (sum of all country segments)
+    const groupedTripDurations: { groupId: string | null; totalDays: number; countries: string[]; tripName: string | null }[] = [];
+    
+    tripGroups.forEach((visits, groupId) => {
+      const totalDays = visits.reduce((sum, v) => sum + (v.number_of_days || 0), 0);
+      const countryNames = visits.map(v => {
+        const country = visitedCountries.find(c => c.id === v.country_id);
+        return country?.name || 'Unknown';
+      });
+      const tripName = visits[0]?.trip_name || null;
+      if (totalDays > 0) {
+        groupedTripDurations.push({ groupId, totalDays, countries: countryNames, tripName });
+      }
+    });
+    
+    // Add standalone visits as individual "trips"
+    standaloneVisits.forEach(visit => {
+      if (visit.number_of_days && visit.number_of_days > 0) {
+        const country = visitedCountries.find(c => c.id === visit.country_id);
+        groupedTripDurations.push({
+          groupId: null,
+          totalDays: visit.number_of_days,
+          countries: [country?.name || 'Unknown'],
+          tripName: visit.trip_name,
+        });
+      }
+    });
+    
+    // Total trip count = unique trip groups + standalone visits
+    const totalTripCount = tripGroups.size + standaloneVisits.length;
+    
+    // --- END GROUPED TRIP LOGIC ---
+    
+    // 1. Travel Frequency Over Time (counts visits, not trips - unchanged)
     const visitsByYear = validVisits.reduce((acc, visit) => {
       const year = visit.visit_date ? getYear(parseISO(visit.visit_date)) : (visit.approximate_year || 0);
       if (year > 0) acc[year] = (acc[year] || 0) + 1;
@@ -64,13 +113,12 @@ const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
     }, {} as Record<number, number>);
     const mostActiveYear = Object.entries(visitsByYear).sort((a, b) => b[1] - a[1])[0];
     
-    // 2. Average Trip Duration
-    const tripsWithDuration = validVisits.filter(v => v.number_of_days && v.number_of_days > 0);
-    const avgDuration = tripsWithDuration.length > 0
-      ? Math.round(tripsWithDuration.reduce((sum, v) => sum + (v.number_of_days || 0), 0) / tripsWithDuration.length)
+    // 2. Average Trip Duration (NOW USES GROUPED DURATIONS)
+    const avgDuration = groupedTripDurations.length > 0
+      ? Math.round(groupedTripDurations.reduce((sum, t) => sum + t.totalDays, 0) / groupedTripDurations.length)
       : 0;
     
-    // 3. Most Visited Country
+    // 3. Most Visited Country (unchanged - country-level stat)
     const countryVisitCounts = validVisits.reduce((acc, visit) => {
       const country = visitedCountries.find(c => c.id === visit.country_id);
       if (country) acc[country.name] = (acc[country.name] || 0) + 1;
@@ -78,9 +126,9 @@ const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
     }, {} as Record<string, number>);
     const mostVisited = Object.entries(countryVisitCounts).sort((a, b) => b[1] - a[1])[0];
     
-    // 4. Longest Single Trip
-    const longestTrip = tripsWithDuration.sort((a, b) => (b.number_of_days || 0) - (a.number_of_days || 0))[0];
-    const longestTripCountry = longestTrip ? visitedCountries.find(c => c.id === longestTrip.country_id) : null;
+    // 4. Longest Single Trip (NOW USES GROUPED DURATIONS)
+    const sortedTrips = [...groupedTripDurations].sort((a, b) => b.totalDays - a.totalDays);
+    const longestGroupedTrip = sortedTrips[0] || null;
     
     // 5. Travel Seasonality
     const visitsByMonth = validVisits.reduce((acc, visit) => {
@@ -143,8 +191,9 @@ const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
     const yearsActive = lastYear && firstYear ? lastYear - firstYear + 1 : 1;
     const velocity = yearsActive > 0 ? (totalVisited / yearsActive).toFixed(1) : '0';
     
-    // 8. Trip Diversity
-    const uniqueTrips = new Set(validVisits.filter(v => v.trip_name).map(v => v.trip_name));
+    // 8. Trip Diversity (NOW USES GROUPED TRIP COUNT)
+    // Count unique trips: trip groups + standalone visits with trip names
+    const uniqueTripsCount = totalTripCount;
     
     // 9. Geographic Spread (continents visited)
     const continentsVisited = new Set(visitedCountries.map(c => c.continent)).size;
@@ -167,7 +216,14 @@ const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
       mostActiveYear: mostActiveYear ? { year: mostActiveYear[0], count: mostActiveYear[1] } : null,
       avgDuration,
       mostVisited: mostVisited ? { country: mostVisited[0], count: mostVisited[1] } : null,
-      longestTrip: longestTrip && longestTripCountry ? { country: longestTripCountry.name, days: longestTrip.number_of_days || 0 } : null,
+      // Longest trip now uses grouped duration (multi-country trips count as one)
+      longestTrip: longestGroupedTrip ? {
+        country: longestGroupedTrip.countries.length > 1 
+          ? `${longestGroupedTrip.countries.length} countries` 
+          : longestGroupedTrip.countries[0],
+        days: longestGroupedTrip.totalDays,
+        tripName: longestGroupedTrip.tripName,
+      } : null,
       favoriteMonth: favoriteMonth ? { month: monthNames[parseInt(favoriteMonth[0])], count: favoriteMonth[1] } : null,
       repeatVisits: repeatVisits.length,
       firstTimePercentage,
@@ -175,7 +231,8 @@ const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
       topCountriesByDays: topCountriesByDays.length > 0 ? topCountriesByDays : null,
       newCountriesYTD: newCountriesYTD > 0 ? newCountriesYTD : null,
       velocity,
-      uniqueTrips: uniqueTrips.size,
+      // Trip count now uses grouped logic (multi-country = 1 trip)
+      uniqueTrips: uniqueTripsCount,
       continentsVisited,
       maxStreak
     };
@@ -370,7 +427,9 @@ const AnalyticsInsightCard = ({ countries }: AnalyticsInsightCardProps) => {
                           <div>
                             <p className="text-sm font-medium text-foreground">Longest Trip</p>
                             <p className="text-xs text-muted-foreground">
-                              {analyticsInsights.longestTrip.country}: {analyticsInsights.longestTrip.days} days
+                              {analyticsInsights.longestTrip.tripName 
+                                ? `${analyticsInsights.longestTrip.tripName}: ` 
+                                : ''}{analyticsInsights.longestTrip.country} ({analyticsInsights.longestTrip.days} days)
                             </p>
                           </div>
                         </div>
