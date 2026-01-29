@@ -45,6 +45,7 @@ import {
   ExternalLink,
   ArrowUpDown,
   Filter,
+  Leaf,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ScoredFlight } from "@/lib/flightScoring";

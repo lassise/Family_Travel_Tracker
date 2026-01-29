@@ -86,20 +86,28 @@ interface ItineraryDay {
 
 interface Trip {
   id: string;
+  user_id: string;
+  family_group_id: string | null;
   title: string;
   destination: string | null;
   start_date: string | null;
   end_date: string | null;
   status: string | null;
+  trip_type: string | null;
+  budget_total: number | null;
+  currency: string | null;
   kids_ages: number[] | null;
   interests: string[] | null;
   pace_preference: string | null;
   notes: string | null;
   cover_image: string | null;
   has_lodging_booked: boolean | null;
+  provider_preferences: string[] | null;
+  lodging_address: string | null;
   needs_wheelchair_access: boolean | null;
   has_stroller: boolean | null;
-  lodging_address: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface TrainSegment {

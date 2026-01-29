@@ -154,6 +154,7 @@ interface VisitDetail {
   approximate_month?: number | null;
   approximate_year?: number | null;
   is_approximate?: boolean;
+  trip_group_id?: string | null;
 }
 
 interface CityVisit {
