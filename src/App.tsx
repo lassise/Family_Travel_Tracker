@@ -28,6 +28,8 @@ const Flights = lazy(() => import("./pages/Flights"));
 const SavedFlights = lazy(() => import("./pages/SavedFlights"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const DiagnosticShare = lazy(() => import("./pages/DiagnosticShare"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -91,6 +93,8 @@ const App = () => (
                 <Route path="/flights" element={<Flights />} />
                 <Route path="/saved-flights" element={<SavedFlights />} />
                 <Route path="/diagnostic/share" element={<DiagnosticShare />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
