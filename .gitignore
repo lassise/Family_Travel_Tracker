@@ -27,3 +27,6 @@ dist-ssr
 # If you see .git/index.lock errors, check GIT_LOCK_FILE_GUIDE.md
 
 .env
+
+Lovable Export DB/
+
