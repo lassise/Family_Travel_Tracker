@@ -154,7 +154,6 @@ interface VisitDetail {
   approximate_month?: number | null;
   approximate_year?: number | null;
   is_approximate?: boolean;
-  trip_group_id?: string | null;
 }
 
 interface CityVisit {
@@ -1347,7 +1346,7 @@ const CountryVisitDetailsDialog = ({
                       visitSubtitle = [monthName, visit.approximate_year].filter(Boolean).join(" ") || "Date unknown";
                     } else if (visit.visit_date) {
                       visitSubtitle = visit.end_date
-                        ? `${format(parseISO(visit.visit_date), "MMM d")} - ${format(parseISO(visit.end_date), "MMM d, yyyy")}`
+                        ? `${format(parseISO(visit.visit_date), "MMM d")} - ${format(parseISO(visit.visit_date), "MMM d, yyyy")}`
                         : format(parseISO(visit.visit_date), "MMM d, yyyy");
                     }
                     visitSubtitle += ` • ${visit.number_of_days} day${visit.number_of_days !== 1 ? "s" : ""}`;

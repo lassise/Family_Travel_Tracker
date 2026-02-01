@@ -25,8 +25,3 @@ dist-ssr
 
 # Git lock files (note: .git/index.lock cannot be ignored, but documenting here)
 # If you see .git/index.lock errors, check GIT_LOCK_FILE_GUIDE.md
-
-.env
-
-Lovable Export DB/
-

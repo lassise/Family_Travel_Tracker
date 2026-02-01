@@ -42,10 +42,8 @@ export const calculateTotalTripDuration = (flight: FlightResult): number => {
   }
 
   // Method 1: Use API's totalDuration if available (most accurate)
-  // Note: totalDuration is not part of our FlightResult type, so we use type assertion
-  const flightWithDuration = flight as FlightResult & { totalDuration?: number };
-  if (flightWithDuration.totalDuration && typeof flightWithDuration.totalDuration === 'number') {
-    return flightWithDuration.totalDuration;
+  if (flight.totalDuration && typeof flight.totalDuration === 'number') {
+    return flight.totalDuration;
   }
 
   // Method 2: Calculate from first departure to last arrival
